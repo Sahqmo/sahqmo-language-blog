@@ -45,6 +45,7 @@ export default function CategoryDonut({ data, total }) {
         <text x="21" y="20.5" textAnchor="middle" className="donut-num">{total}</text>
         <text x="21" y="25.5" textAnchor="middle" className="donut-label">posts</text>
       </svg>
+      {data.length === 0 && <p className="legend-empty">글을 쓰면 비율이 나타나요.</p>}
       <ul className="legend">
         {data.map((d) => (
           <li key={d.name}>

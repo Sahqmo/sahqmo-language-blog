@@ -46,59 +46,70 @@ export default function Home() {
   if (error) return <p className="state error">{error}</p>
   if (!posts) return <p className="state">불러오는 중…</p>
 
-  if (posts.length === 0) {
-    return (
-      <div className="empty">
-        <p>아직 작성된 글이 없어요.</p>
-        {loggedIn && <Link to="/write" className="btn">첫 글 쓰기</Link>}
-      </div>
-    )
-  }
-
   const latest = posts[0]
-  const topCats = cats.slice(0, 3)
+  const hasPosts = posts.length > 0
+  // 글이 없어도 형식은 채워 두기 위해 빈 카테고리 노트 3장을 보여 줌
+  const topCats = hasPosts ? cats.slice(0, 3) : [null, null, null]
   const setCategory = (c) => setParams(c ? { category: c } : {})
 
   return (
     <>
       <div className="hero-screen">
       <section className="top-grid">
-        <Link to={`/post/${latest.id}`} className={`panel latest ${intro ? 'enter' : ''}`} style={intro ? { '--i': 0 } : undefined}>
-          <h3 className="panel-title">가장 최근 글</h3>
-          <div className="card-meta">
-            <time>{formatDate(latest.date)}</time>
-            {latest.category && <span className="cat">{latest.category}</span>}
+        {latest ? (
+          <Link to={`/post/${latest.id}`} className={`panel latest ${intro ? 'enter' : ''}`} style={intro ? { '--i': 0 } : undefined}>
+            <h3 className="panel-title">가장 최근 글</h3>
+            <div className="card-meta">
+              <time>{formatDate(latest.date)}</time>
+              {latest.category && <span className="cat">{latest.category}</span>}
+            </div>
+            <h2>{latest.title}</h2>
+            <p>{latest.excerpt}</p>
+            <span className="more">이어 읽기 →</span>
+          </Link>
+        ) : (
+          <div className={`panel latest is-empty ${intro ? 'enter' : ''}`} style={intro ? { '--i': 0 } : undefined}>
+            <h3 className="panel-title">가장 최근 글</h3>
+            <h2>아직 작성된 글이 없어요</h2>
+            <p>첫 글을 쓰면 가장 최근 글의 미리보기가 이곳에 나타나요.</p>
+            {loggedIn ? <Link to="/write" className="btn start-btn">첫 글 쓰기</Link> : <Link to="/login" className="more">로그인하고 시작하기 →</Link>}
           </div>
-          <h2>{latest.title}</h2>
-          <p>{latest.excerpt}</p>
-          <span className="more">이어 읽기 →</span>
-        </Link>
+        )}
         <div className={`panel ${intro ? 'enter' : ''}`} style={intro ? { '--i': 1 } : undefined}>
           <h3 className="panel-title">언어별 글 비율</h3>
           <CategoryDonut data={cats} total={posts.length} />
         </div>
       </section>
 
-      {topCats.length > 0 && (
+      {(
         <section className="block">
           <h3 className={`section-title ${intro ? 'enter' : ''}`} style={intro ? { '--i': 2 } : undefined}>많이 쓴 카테고리</h3>
           <div className="cat-grid">
             {topCats.map((c, i) => (
-              <div key={c.name} className={`panel cat-panel ${intro ? 'enter' : ''}`} style={intro ? { '--i': 3 + i } : undefined}>
-                <button className="cat-head" onClick={() => setCategory(c.name)}>
-                  <i style={{ background: c.color }} />
-                  <strong>{c.name}</strong>
-                  <span>{c.count}편</span>
-                </button>
+              <div key={c ? c.name : `empty-${i}`} className={`panel cat-panel ${c ? '' : 'is-empty'} ${intro ? 'enter' : ''}`} style={intro ? { '--i': 3 + i } : undefined}>
+                {c ? (
+                  <button className="cat-head" onClick={() => setCategory(c.name)}>
+                    <i style={{ background: c.color }} />
+                    <strong>{c.name}</strong>
+                    <span>{c.count}편</span>
+                  </button>
+                ) : (
+                  <div className="cat-head">
+                    <i />
+                    <strong>카테고리</strong>
+                    <span>0편</span>
+                  </div>
+                )}
                 <ul>
-                  {posts
-                    .filter((p) => (p.category || UNCATEGORIZED) === c.name)
-                    .slice(0, 3)
-                    .map((p) => (
-                      <li key={p.id}>
-                        <Link to={`/post/${p.id}`}><span>{p.title}</span></Link>
-                      </li>
-                    ))}
+                  {c &&
+                    posts
+                      .filter((p) => (p.category || UNCATEGORIZED) === c.name)
+                      .slice(0, 5)
+                      .map((p) => (
+                        <li key={p.id}>
+                          <Link to={`/post/${p.id}`}><span>{p.title}</span></Link>
+                        </li>
+                      ))}
                 </ul>
               </div>
             ))}
@@ -130,7 +141,7 @@ export default function Home() {
           onChange={(e) => setQuery(e.target.value)}
         />
         {filtered.length === 0 ? (
-          <p className="state">해당하는 글이 없어요.</p>
+          <p className="state">{hasPosts ? '해당하는 글이 없어요.' : '아직 작성된 글이 없어요.'}</p>
         ) : (
           <ul className="post-list">
             {(category || query ? filtered : filtered.slice(0, 8)).map((p, i) => (
