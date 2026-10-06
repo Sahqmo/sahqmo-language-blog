@@ -1,0 +1,72 @@
+import { useEffect, useState } from 'react'
+import { Link, NavLink, Route, Routes } from 'react-router-dom'
+import { RequireAuth, useAuth } from './auth.jsx'
+import Home from './pages/Home.jsx'
+import PostPage from './pages/PostPage.jsx'
+import Editor from './pages/Editor.jsx'
+import Login from './pages/Login.jsx'
+import TagPage from './pages/TagPage.jsx'
+
+// 마크다운 에디터가 시스템 다크/라이트 설정을 따르도록 동기화
+function useColorMode() {
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const apply = () => (document.documentElement.dataset.colorMode = mq.matches ? 'dark' : 'light')
+    apply()
+    mq.addEventListener('change', apply)
+    return () => mq.removeEventListener('change', apply)
+  }, [])
+}
+
+// 스크롤을 내리면 고정 헤더에 경계선/그림자 표시
+function useScrolled() {
+  const [scrolled, setScrolled] = useState(false)
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+  return scrolled
+}
+
+export default function App() {
+  useColorMode()
+  const scrolled = useScrolled()
+  const { ready, loggedIn, logout } = useAuth()
+  return (
+    <div className="shell">
+      <header className={`site-header ${scrolled ? 'scrolled' : ''}`}>
+        <Link to="/" className="brand">
+          <span className="brand-mark">言</span>
+          <span>
+            <strong>Sahqmo</strong>
+            <small>언어학 노트</small>
+          </span>
+        </Link>
+        <nav>
+          <NavLink to="/" end>글 목록</NavLink>
+          {ready && loggedIn && (
+            <>
+              <NavLink to="/write" className="btn-write">새 글 쓰기</NavLink>
+              <button className="link-btn" onClick={logout}>로그아웃</button>
+            </>
+          )}
+          {ready && !loggedIn && <NavLink to="/login">로그인</NavLink>}
+        </nav>
+      </header>
+      <main>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/post/:ref" element={<PostPage />} />
+          <Route path="/tag/:tag" element={<TagPage />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/write" element={<RequireAuth><Editor /></RequireAuth>} />
+          <Route path="/edit/:ref" element={<RequireAuth><Editor /></RequireAuth>} />
+          <Route path="*" element={<p className="state">페이지를 찾을 수 없어요.</p>} />
+        </Routes>
+      </main>
+      <footer className="site-footer">조용히 쌓아 가는 언어의 기록</footer>
+    </div>
+  )
+}
