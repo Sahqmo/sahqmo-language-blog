@@ -41,7 +41,15 @@ export default function App() {
   return (
     <div className="shell">
       <header className={`site-header ${scrolled ? 'scrolled' : ''}`}>
-        <Link to="/" className="brand">
+        <Link
+          to="/"
+          className="brand"
+          onClick={() => {
+            // 메인에서 로고를 누르면 맨 위로 부드럽게 올림 (카테고리 필터가 걸려 있으면 링크 이동으로 필터도 해제됨)
+            if (!onHome) return
+            window.scrollTo({ top: 0, behavior: 'smooth' })
+          }}
+        >
           <span className="brand-mark">言</span>
           <span>
             <strong>Sahqmo</strong>
