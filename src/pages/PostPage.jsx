@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api.js'
 import DateLabel from '../components/DateLabel.jsx'
@@ -15,6 +16,8 @@ export default function PostPage() {
   const [confirming, setConfirming] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+  const titleRef = useRef(null)
+  const [titleHidden, setTitleHidden] = useState(false) // 본문 제목이 (고정 헤더 아래로) 화면에서 벗어났는지
   const closeConfirm = useCallback(() => {
     setConfirming(false)
     setDeleteError('')
@@ -35,6 +38,20 @@ export default function PostPage() {
     }
   }, [ref])
 
+  // 긴 글을 스크롤해 제목이 안 보이게 되면 헤더 가운데에 제목을 대신 표시.
+  // 고정 헤더에 가려진 부분도 "안 보임"으로 치도록 위쪽 경계를 헤더 높이만큼 안으로 줄임
+  useEffect(() => {
+    const el = titleRef.current
+    setTitleHidden(false)
+    if (!el) return
+    const header = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--header-h'), 10) || 76
+    const io = new IntersectionObserver(([e]) => setTitleHidden(!e.isIntersecting && e.boundingClientRect.top < header), {
+      rootMargin: `-${header}px 0px 0px 0px`,
+    })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [post])
+
   async function remove() {
     setDeleting(true)
     setDeleteError('')
@@ -47,14 +64,30 @@ export default function PostPage() {
     }
   }
 
+  const headerSlot = document.getElementById('header-title')
+
   if (error) return <p className="state error">글을 찾을 수 없어요.</p>
   if (!post) return <p className="state">불러오는 중…</p>
 
   return (
     <article className="post">
+      {headerSlot &&
+        createPortal(
+          <button
+            type="button"
+            className={`header-title-text ${titleHidden ? 'show' : ''}`}
+            tabIndex={titleHidden ? 0 : -1}
+            aria-hidden={!titleHidden}
+            title="맨 위로"
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          >
+            {post.title}
+          </button>,
+          headerSlot,
+        )}
       <Link to="/posts" className="back">← 글 목록</Link>
       <header>
-        <h1>{post.title}</h1>
+        <h1 ref={titleRef}>{post.title}</h1>
         <div className="meta">
           {post.private && <span className="lock">🔒 비공개</span>}
           {post.category && (

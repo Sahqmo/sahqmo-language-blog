@@ -10,6 +10,18 @@ import PostList from './pages/PostList.jsx'
 const Editor = lazy(() => import('./pages/Editor.jsx'))
 const PostPage = lazy(() => import('./pages/PostPage.jsx'))
 
+// 헤더 메뉴용 선 아이콘 (글 목록 / 로그인 / 로그아웃)
+const ICONS = {
+  list: <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />,
+  login: <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3" />,
+  logout: <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />,
+}
+const NavIcon = ({ name }) => (
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {ICONS[name]}
+  </svg>
+)
+
 // 마크다운 에디터가 시스템 다크/라이트 설정을 따르도록 동기화
 function useColorMode() {
   useEffect(() => {
@@ -56,26 +68,33 @@ export default function App() {
             <small>언어학 노트</small>
           </span>
         </Link>
+        {/* 글 페이지에서 제목이 화면 밖으로 나가면 PostPage 가 여기에 제목을 띄움 */}
+        <div id="header-title" className="header-title" />
         <nav>
           {/* 메인에서는 아래 '최근 게시된 글'로 스크롤, 다른 페이지에서는 글 목록 페이지로 이동 */}
           <NavLink
             to={onHome ? '/' : '/posts'}
             end
+            className="nav-icon"
+            aria-label="글 목록"
+            title="글 목록"
             onClick={(e) => {
               if (!onHome) return
               e.preventDefault()
               document.getElementById('recent')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
             }}
           >
-            글 목록
+            <NavIcon name="list" />
           </NavLink>
           {ready && loggedIn && (
             <>
               <NavLink to="/write" className="btn-write">새 글 쓰기</NavLink>
-              <button className="link-btn" onClick={logout}>로그아웃</button>
+              <button className="link-btn nav-icon" onClick={logout} aria-label="로그아웃" title="로그아웃"><NavIcon name="logout" /></button>
             </>
           )}
-          {ready && !loggedIn && <NavLink to="/login">로그인</NavLink>}
+          {ready && !loggedIn && (
+            <NavLink to="/login" className="nav-icon" aria-label="로그인" title="로그인"><NavIcon name="login" /></NavLink>
+          )}
         </nav>
       </header>
       <main>
