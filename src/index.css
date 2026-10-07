@@ -294,6 +294,8 @@ nav a:hover { color: var(--text); }
 .page-size { display: flex; align-items: center; gap: 8px; margin: -10px 0 18px; font-size: .85rem; color: var(--muted); }
 .page-size select { border: 1px solid var(--line); background: var(--surface); color: var(--text); border-radius: 999px; padding: 3px 10px; font: inherit; cursor: pointer; }
 .page-size-total { margin-left: auto; }
+.more-link { display: block; width: fit-content; margin: 28px auto 0; padding: 8px 22px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: .9rem; text-decoration: none; transition: color .15s, border-color .15s; }
+.more-link:hover { color: var(--accent); border-color: var(--accent); }
 .pager { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; margin-top: 28px; }
 .pager-item { display: inline-flex; align-items: center; gap: 6px; }
 .pager-gap { color: var(--muted); }

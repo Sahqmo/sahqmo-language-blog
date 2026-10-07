@@ -109,7 +109,8 @@ export default function Home() {
         category={category}
         onCategory={setCategory}
         title="최근 게시된 글"
-        limit={8}
+        limit={5}
+        moreTo={category ? `/posts?category=${encodeURIComponent(category)}` : '/posts'}
       />
     </>
   )

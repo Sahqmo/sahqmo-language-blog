@@ -4,7 +4,7 @@ import { api } from '../api.js'
 import PostBrowser from '../components/PostBrowser.jsx'
 import { countCategories } from '../components/CategoryDonut.jsx'
 
-export const PAGE_SIZES = [5, 10, 20, 50, 100]
+export const PAGE_SIZES = [5, 10, 20]
 const SIZE_KEY = 'postListPageSize'
 
 function loadSize() {

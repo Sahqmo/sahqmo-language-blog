@@ -1,12 +1,14 @@
 import { forwardRef, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import Reveal from './Reveal.jsx'
 import PostCard from './PostCard.jsx'
 import { UNCATEGORIZED } from './CategoryDonut.jsx'
 
 // 카테고리 칩 + 검색 + 글 카드 목록 (메인 하단 '최근 게시된 글'과 글 목록 페이지가 함께 사용)
-//   limit: 필터/검색이 없을 때 보여줄 최대 개수 (생략하면 전부)
+//   limit: 보여줄 최대 개수 (필터/검색 결과에도 적용, 생략하면 전부)
+//   moreTo: 목록 아래에 '전체 글 보기' 링크를 걸 주소 (limit 로 잘렸을 때 쓰면 좋음)
 //   paging: { size, sizes, page, onSize, onPage } 를 넘기면 한 페이지 글 개수 선택과 페이지 이동이 생김 (필터/검색 결과에도 적용)
-const PostBrowser = forwardRef(function PostBrowser({ posts, cats, category, onCategory, title, limit, paging }, ref) {
+const PostBrowser = forwardRef(function PostBrowser({ posts, cats, category, onCategory, title, limit, paging, moreTo }, ref) {
   const [query, setQuery] = useState('')
 
   const filtered = useMemo(() => {
@@ -22,7 +24,7 @@ const PostBrowser = forwardRef(function PostBrowser({ posts, cats, category, onC
   const page = paging ? Math.min(paging.page, pages) : 1
   const shown = paging
     ? filtered.slice((page - 1) * paging.size, page * paging.size)
-    : limit && !category && !query
+    : limit
       ? filtered.slice(0, limit)
       : filtered
 
@@ -66,6 +68,9 @@ const PostBrowser = forwardRef(function PostBrowser({ posts, cats, category, onC
             <Reveal as="li" key={p.id}><PostCard p={p} /></Reveal>
           ))}
         </ul>
+      )}
+      {moreTo && (
+        <Link className="more-link" to={moreTo}>전체 글 보기 <span aria-hidden="true">→</span></Link>
       )}
       {paging && pages > 1 && (
         <nav className="pager" aria-label="페이지 이동">

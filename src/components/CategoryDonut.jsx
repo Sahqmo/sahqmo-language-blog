@@ -6,6 +6,12 @@ import { Link } from 'react-router-dom'
 export const PALETTE = ['#5f7a5c', '#c58a4a', '#6f8fa6', '#b4655a', '#8a6fa0', '#b8a24e', '#4f9a94', '#9a7b66']
 export const UNCATEGORIZED = '미분류'
 
+// 카테고리 정렬: '~어'로 끝나는 것(언어) 먼저 → 나머지 가나다순 → '기타'/미분류는 항상 맨 끝
+const OTHERS = ['기타', UNCATEGORIZED]
+const categoryRank = (name) => (OTHERS.includes(name) ? 2 : name.endsWith('어') ? 0 : 1)
+export const compareCategories = (a, b) =>
+  categoryRank(a) - categoryRank(b) || OTHERS.indexOf(a) - OTHERS.indexOf(b) || a.localeCompare(b, 'ko')
+
 export function countCategories(posts) {
   const map = new Map()
   for (const p of posts) {
@@ -14,7 +20,7 @@ export function countCategories(posts) {
   }
   return [...map.entries()]
     .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .sort((a, b) => compareCategories(a.name, b.name))
     .map((c, i) => ({ ...c, color: PALETTE[i % PALETTE.length] }))
 }
 
