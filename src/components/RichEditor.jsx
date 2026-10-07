@@ -6,6 +6,9 @@ import { clearTextInCurrentBlockCommand } from '@milkdown/kit/preset/commonmark'
 import { addRowAfterCommand, tableCellSchema, tableHeaderSchema } from '@milkdown/kit/preset/gfm'
 import { addColumn, deleteColumn, deleteRow, deleteTable, isInTable, selectedRect } from '@milkdown/kit/prose/tables'
 import { Selection } from '@milkdown/kit/prose/state'
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
+import { languages } from '@codemirror/language-data'
+import { tags as t } from '@lezer/highlight'
 import '@milkdown/crepe/theme/common/style.css'
 import '@milkdown/crepe/theme/frame.css'
 import { api } from '../api.js'
@@ -44,6 +47,20 @@ const withColWidth = (schema) =>
     }
   })
 const colWidthPlugins = [withColWidth(tableCellSchema), withColWidth(tableHeaderSchema)]
+
+// 코드 블록 문법 색: 실제 색은 CSS 변수(--tok-*)라서 라이트/다크 모드에 따라 바뀌고, 게시글(hljs)과 같은 색을 씀
+const codeHighlight = syntaxHighlighting(
+  HighlightStyle.define([
+    { tag: [t.keyword, t.modifier, t.operatorKeyword, t.controlKeyword, t.definitionKeyword, t.moduleKeyword], color: 'var(--tok-keyword)' },
+    { tag: [t.string, t.special(t.string), t.regexp, t.character], color: 'var(--tok-string)' },
+    { tag: [t.number, t.bool, t.null, t.atom, t.literal], color: 'var(--tok-number)' },
+    { tag: [t.comment, t.lineComment, t.blockComment], color: 'var(--tok-comment)', fontStyle: 'italic' },
+    { tag: [t.function(t.variableName), t.function(t.propertyName), t.definition(t.function(t.variableName))], color: 'var(--tok-function)' },
+    { tag: [t.typeName, t.className, t.namespace], color: 'var(--tok-type)' },
+    { tag: [t.propertyName, t.attributeName, t.tagName], color: 'var(--tok-attr)' },
+    { tag: [t.meta, t.processingInstruction, t.punctuation, t.operator], color: 'var(--tok-punct)' },
+  ]),
+)
 
 const MIN_COL = 60
 const GRAB = 5 // 셀 오른쪽 테두리에서 이 픽셀 안쪽이면 너비 조절 영역
@@ -200,7 +217,16 @@ export default function RichEditor({ defaultValue, getMarkdownRef, onError, onNo
     }
     const onDown = (e) => {
       const hit = e.button === 0 && borderAt(e)
-      if (!hit) return
+      if (!hit) {
+        // Milkdown 표 블록은 커서가 없던 셀을 처음 누르면 그 mousedown 을 가로채고 다음 프레임에 선택을 덮어써서, 첫 드래그가 선택되지 않고 커서만 옮겨짐.
+        // 누르기 전에 커서를 그 위치에 먼저 두면 "이미 커서가 있는 셀" 로 취급되어 평소처럼 드래그 선택이 됨.
+        if (e.button === 0 && e.target.closest?.('td, th')) {
+          const v = view()
+          const at = v?.posAtCoords({ left: e.clientX, top: e.clientY })
+          if (v && at) v.dispatch(v.state.tr.setSelection(Selection.near(v.state.doc.resolve(at.pos), 1)))
+        }
+        return
+      }
       e.preventDefault()
       e.stopPropagation()
       const cells = [...hit.table.querySelector('tr').children]
@@ -373,6 +399,7 @@ export default function RichEditor({ defaultValue, getMarkdownRef, onError, onNo
             })
           },
         },
+        [Crepe.Feature.CodeMirror]: { languages, extensions: [codeHighlight] },
         [Crepe.Feature.ImageBlock]: {
           onUpload: uploadImage,
           inlineOnUpload: uploadImage,

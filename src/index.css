@@ -1,14 +1,22 @@
 :root {
   --gutter: 24px; /* 본문 좌우 여백 (좁은 화면에서 줄어듦) */
-  --bg: #f6f1e7;
-  --surface: #fbf8f1;
-  --text: #2f2a24;
-  --muted: #8a7f70;
-  --line: #e4dccb;
+  --bg: #f7f7f6;
+  --surface: #ffffff;
+  --text: #2a2a28;
+  --muted: #7d7d79;
+  --line: #e4e4e1;
   --accent: #5f7a5c;
   --accent-soft: #e3eadb;
   --danger: #a4493d;
   --radius: 14px;
+  /* 제목 위 여백: 글자 크기에 맞춰 H1 > H2 > H3 > H4~6 순으로 (게시글과 에디터 공통) */
+  --h1-gap: 30px;
+  --h2-gap: 24px;
+  --h3-gap: 18px;
+  --h4-gap: 14px;
+  --tok-keyword: #9a4f8f; --tok-string: #4f7a3f; --tok-number: #b0642a; --tok-comment: #9a9a94;
+  --tok-function: #2f6f9f; --tok-type: #a0742a; --tok-attr: #2f6f9f; --tok-punct: #6b6b66;
+  --mono: Consolas, 'Courier New', monospace; /* 코드 블록 전용 고정폭 폰트 */
   --serif: 'Noto Serif', 'Noto Serif KR', Georgia, serif;
 }
 
@@ -22,6 +30,8 @@
     --accent: #9bb995;
     --accent-soft: #2d3629;
     --danger: #d9786b;
+    --tok-keyword: #d68fc9; --tok-string: #a9cf8e; --tok-number: #e0a46b; --tok-comment: #7f7a6f;
+    --tok-function: #7fb4de; --tok-type: #deb870; --tok-attr: #7fb4de; --tok-punct: #a39d92;
   }
 }
 
@@ -124,23 +134,45 @@ nav a:hover { color: var(--text); }
 .prose li { padding: 3px 0; }
 .prose li > p { padding: 0; }
 .prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 { line-height: 1.4; padding: 2px 0; }
-.prose > h1 { margin-top: 12px; }
-.prose > h2 { margin-top: 10px; }
-.prose > h3 { margin-top: 8px; }
-.prose > h4, .prose > h5, .prose > h6 { margin-top: 6px; font-size: 1.05rem; }
+.prose > h1 { margin-top: var(--h1-gap); }
+.prose > h2 { margin-top: var(--h2-gap); }
+.prose > h3 { margin-top: var(--h3-gap); }
+.prose > h4, .prose > h5, .prose > h6 { margin-top: var(--h4-gap); font-size: 1.05rem; }
+.prose > :is(h1, h2, h3, h4, h5, h6):first-child { margin-top: 0; }
 .prose h2 { font-size: 1.5rem; }
 .prose h3 { font-size: 1.2rem; }
 .prose a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
 .prose img { max-width: 100%; border-radius: 10px; }
 .yt-embed { position: relative; aspect-ratio: 16 / 9; margin: 8px 0; border-radius: 10px; overflow: hidden; background: #000; }
 .yt-embed iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
-.prose blockquote { padding: 10px 1.2em; border-left: 3px solid var(--accent); color: var(--muted); background: var(--surface); border-radius: 0 10px 10px 0; }
+.prose blockquote { padding: 10px 1.2em; border-left: 3px solid var(--accent); color: var(--text); background: var(--surface); border-radius: 0 10px 10px 0; }
 .prose code { background: var(--accent-soft); padding: .1em .4em; border-radius: 6px; font-size: .9em; }
-.prose pre { background: var(--surface); border: 1px solid var(--line); padding: 16px; border-radius: 10px; overflow-x: auto; }
-.prose pre code { background: none; padding: 0; }
+.prose pre { background: var(--surface); border: 1px solid var(--line); padding: 16px; border-radius: 12px; overflow-x: auto; }
+.prose pre code { background: none; padding: 0; font-family: var(--mono); }
+.prose .hljs-keyword, .prose .hljs-selector-tag, .prose .hljs-literal.hljs-keyword, .prose .hljs-doctag { color: var(--tok-keyword); }
+.prose .hljs-string, .prose .hljs-regexp, .prose .hljs-addition, .prose .hljs-char { color: var(--tok-string); }
+.prose .hljs-number, .prose .hljs-literal, .prose .hljs-symbol, .prose .hljs-bullet { color: var(--tok-number); }
+.prose .hljs-comment, .prose .hljs-quote { color: var(--tok-comment); font-style: italic; }
+.prose .hljs-title, .prose .hljs-title.function_, .prose .hljs-section { color: var(--tok-function); }
+.prose .hljs-type, .prose .hljs-built_in, .prose .hljs-title.class_ { color: var(--tok-type); }
+.prose .hljs-attr, .prose .hljs-attribute, .prose .hljs-name, .prose .hljs-property, .prose .hljs-variable, .prose .hljs-template-variable { color: var(--tok-attr); }
+.prose .hljs-meta, .prose .hljs-punctuation, .prose .hljs-operator { color: var(--tok-punct); }
+.prose .hljs-deletion { color: var(--danger); }
 .prose table { border-collapse: collapse; width: 100%; font-size: .95rem; }
 .prose th, .prose td { border: 1px solid var(--line); padding: 8px 12px; text-align: left; }
 .prose th { background: var(--surface); }
+/* 표 바로 아래 문단이 붙어 보이지 않게 (에디터의 표 블록 여백과 비슷하게) */
+.prose > table + *, .prose > .table-scroll + * { margin-top: 12px; }
+/* 코드 블록은 위쪽을 조금 더, 아래 문단도 붙어 보이지 않게 */
+.prose > .code-block { margin-top: 16px; }
+.prose > .code-block + * { margin-top: 14px; }
+.code-block { position: relative; }
+.code-block pre { margin: 0; }
+.code-actions { position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; opacity: 0; transition: opacity .15s; }
+.code-block:hover .code-actions, .code-block:focus-within .code-actions { opacity: 1; }
+.code-actions button { cursor: pointer; border: 1px solid var(--line); background: var(--bg); color: var(--muted); border-radius: 8px; width: 30px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.code-actions button:hover { color: var(--accent); border-color: var(--accent); }
+@media (hover: none) { .code-actions { opacity: 1; } }
 .prose hr { border: none; border-top: 1px solid var(--line); margin: 10px 0; }
 
 /* editor */
@@ -200,7 +232,9 @@ nav a:hover { color: var(--text); }
 /* 줄바꿈(Shift+Enter 또는 기존 글의 단일 개행)을 화면에서도 줄바꿈으로 */
 .rich-editor [data-type='hardbreak'][data-is-inline='true']::after { content: '\A'; white-space: pre; }
 .rich-editor .ProseMirror blockquote { border-left: 3px solid var(--accent); }
-.rich-editor .milkdown .ProseMirror blockquote { padding-top: 10px; padding-bottom: 10px; }
+.rich-editor .milkdown .ProseMirror blockquote { padding: 10px 1.2em; }
+/* Crepe 기본 인용구는 왼쪽 padding 40px + 별도 막대(::before)라 간격이 넓음 → 게시글처럼 막대(border) 하나와 1.2em 간격만 사용 */
+.rich-editor .milkdown .ProseMirror blockquote::before { display: none; }
 
 @media (max-width: 560px) {
   body { font-size: 16px; }
@@ -257,6 +291,13 @@ nav a:hover { color: var(--text); }
 .filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
 .chip { border: 1px solid var(--line); background: transparent; color: var(--muted); padding: 2px 14px; border-radius: 999px; cursor: pointer; font-size: .85rem; }
 .chip:hover { color: var(--text); border-color: var(--muted); }
+.page-size { display: flex; align-items: center; gap: 8px; margin: -10px 0 18px; font-size: .85rem; color: var(--muted); }
+.page-size select { border: 1px solid var(--line); background: var(--surface); color: var(--text); border-radius: 999px; padding: 3px 10px; font: inherit; cursor: pointer; }
+.page-size-total { margin-left: auto; }
+.pager { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; margin-top: 28px; }
+.pager-item { display: inline-flex; align-items: center; gap: 6px; }
+.pager-gap { color: var(--muted); }
+.chip:disabled { opacity: .4; cursor: default; }
 .chip.on { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 a.cat.clickable { transition: filter .15s; }
 a.cat.clickable:hover { filter: brightness(1.12); }
@@ -303,7 +344,7 @@ a.cat.clickable:hover { filter: brightness(1.12); }
 .legend { justify-content: center; }
 
 /* 많이 쓴 카테고리: 줄 쳐진 메모장 */
-:root { --rule: #e3dac5; --margin: #e2b3a9; }
+:root { --rule: #e4e4e1; --margin: #e2b3a9; }
 @media (prefers-color-scheme: dark) { :root { --rule: #3a342b; --margin: #6e403a; } }
 
 .cat-panel {
@@ -357,12 +398,13 @@ a.tag:hover, .tag.clickable:hover { background: var(--accent); color: var(--bg);
 .tag-head span { color: var(--muted); }
 
 /* 에디터 제목 크기를 게시된 글(.prose)과 동일하게 */
-.rich-editor .milkdown .ProseMirror h1 { font-size: 2.1rem; line-height: 1.35; font-weight: 700; margin-top: 12px; }
-.rich-editor .milkdown .ProseMirror h2 { font-size: 1.5rem; line-height: 1.4; font-weight: 700; margin-top: 10px; }
-.rich-editor .milkdown .ProseMirror h3 { font-size: 1.2rem; line-height: 1.4; font-weight: 700; margin-top: 8px; }
+.rich-editor .milkdown .ProseMirror h1 { font-size: 2.1rem; line-height: 1.35; font-weight: 700; margin-top: var(--h1-gap); }
+.rich-editor .milkdown .ProseMirror h2 { font-size: 1.5rem; line-height: 1.4; font-weight: 700; margin-top: var(--h2-gap); }
+.rich-editor .milkdown .ProseMirror h3 { font-size: 1.2rem; line-height: 1.4; font-weight: 700; margin-top: var(--h3-gap); }
 .rich-editor .milkdown .ProseMirror h4,
 .rich-editor .milkdown .ProseMirror h5,
-.rich-editor .milkdown .ProseMirror h6 { font-size: 1.05rem; line-height: 1.5; font-weight: 700; margin-top: 6px; }
+.rich-editor .milkdown .ProseMirror h6 { font-size: 1.05rem; line-height: 1.5; font-weight: 700; margin-top: var(--h4-gap); }
+.rich-editor .milkdown .ProseMirror > :is(h1, h2, h3, h4, h5, h6):first-child { margin-top: 0; }
 
 /* 블록 핸들(+ / 드래그 아이콘)을 에디터 박스 바깥 왼쪽 여백으로 빼냄. 좁은 화면에서는 안쪽 여백을 써서 잘리지 않게 함 */
 @media (min-width: 960px) {
@@ -439,6 +481,16 @@ body { overflow-x: clip; }
 @media (prefers-reduced-motion: reduce) { .modal-backdrop, .modal { animation: none; } }
 
 /* 표 안에 커서가 있을 때 표 아래에 뜨는 열/행 추가 버튼 */
+/* 에디터 코드 블록 여백도 게시글과 동일하게 (그리드 gap 4px 포함) */
+.rich-editor .milkdown .milkdown-code-block { margin: 12px 0 10px; --crepe-font-code: var(--mono); border-radius: 12px; overflow: hidden; }
+/* 클릭한 줄과 그 줄 번호의 어두운 강조를 사이트 색의 은은한 강조로 */
+.rich-editor .milkdown .milkdown-code-block .cm-activeLine { background: color-mix(in srgb, var(--accent-soft) 45%, transparent); }
+.rich-editor .milkdown .milkdown-code-block .cm-activeLineGutter { background: transparent; color: var(--accent); font-weight: 700; }
+.rich-editor .milkdown .milkdown-code-block .cm-gutters { color: var(--muted); }
+.rich-editor .milkdown .milkdown-code-block .cm-content { caret-color: var(--text); }
+.rich-editor .milkdown .milkdown-code-block .cm-editor, .rich-editor .milkdown .milkdown-code-block .cm-content { font-family: var(--mono); }
+/* 표 테두리/끝에 나타나는 기본 ＋ 버튼은 아래 상시 버튼과 중복이라 숨김 (행/열 이동 시 위치 표시선은 유지) */
+.rich-editor .milkdown-table-block .line-handle .add-button { display: none; }
 .table-bar { position: absolute; z-index: 5; display: flex; gap: 6px; }
 .table-bar button { cursor: pointer; border: 1px solid var(--line); background: var(--bg); color: var(--muted); border-radius: 999px; padding: 3px 12px; font-size: .8rem; box-shadow: 0 2px 8px rgba(0, 0, 0, .08); }
 .table-bar button:hover { color: var(--accent); border-color: var(--accent); }
