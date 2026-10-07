@@ -141,7 +141,8 @@ export default function RichEditor({ defaultValue, getMarkdownRef, onError, onNo
     if (!root || !table || !root.contains(table)) return setTableBar(null)
     const t = table.getBoundingClientRect()
     const r = root.getBoundingClientRect()
-    setTableBar({ top: t.bottom - r.top + 6, left: t.left - r.left, width: t.width, inHeader: !!el.closest('th'), cols: table.rows[0]?.cells.length ?? 0, rows: table.rows.length })
+    const next = { top: t.bottom - r.top + 6, left: t.left - r.left, width: t.width, inHeader: !!el.closest('th'), cols: table.rows[0]?.cells.length ?? 0, rows: table.rows.length }
+    setTableBar(next)
   }, [])
 
   useEffect(() => {
@@ -238,8 +239,52 @@ export default function RichEditor({ defaultValue, getMarkdownRef, onError, onNo
     requestAnimationFrame(updateTableBar)
   }
 
+  // 열/행 추가: 새 셀에는 colwidth 가 없어서 그대로 두면 표 너비 정보가 깨지므로(저장 시 통째로 사라짐), 추가 직후 모든 행에 열 너비를 다시 채워 줌
+  // 커서가 제목 행에 있을 때(표를 막 만든 직후 등)의 '－ 행': 제목 행은 지울 수 없으므로 바로 아래 본문 행을 지움
+  const deleteRowBelowHeader = (state, dispatch) => {
+    const { $from } = state.selection
+    let d = $from.depth
+    while (d > 0 && $from.node(d).type.spec.tableRole !== 'table') d--
+    if (!d) return false
+    const table = $from.node(d)
+    if (table.childCount < 3) return false
+    let pos = $from.start(d) + table.child(0).nodeSize + 1 // 둘째 행 안쪽
+    pos += 1 // 첫 셀 안쪽
+    const moved = state.apply(state.tr.setSelection(Selection.near(state.doc.resolve(pos + 1), 1)))
+    return deleteRow(moved, dispatch)
+  }
+
   const runTableCommand = (command) => {
-    crepeRef.current?.editor.action((ctx) => ctx.get(commandsCtx).call(command.key))
+    crepeRef.current?.editor.action((ctx) => {
+      const v = ctx.get(editorViewCtx)
+      const { $from } = v.state.selection
+      let d = $from.depth
+      while (d > 0 && $from.node(d).type.spec.tableRole !== 'table') d--
+      const tableStart = d ? $from.start(d) : 0
+      const selCol = d ? $from.index(d + 1) : 0
+      const before = []
+      if (d) $from.node(d).firstChild?.forEach((cell) => before.push(cell.attrs.colwidth?.[0] ?? 0))
+      ctx.get(commandsCtx).call(command.key)
+      if (!d || !before.length || !before.every(Boolean)) return // 너비를 조절한 적 없는 표는 건드리지 않음
+      const table = v.state.doc.nodeAt(tableStart - 1)
+      if (table?.type.spec.tableRole !== 'table') return
+      const widths = before.slice()
+      if (table.firstChild.childCount === before.length + 1) {
+        // 새 열은 현재 열 너비를 반으로 나눠 가짐 (표 전체 폭 유지)
+        const half = Math.max(MIN_COL, Math.round(before[selCol] / 2))
+        widths[selCol] = Math.max(MIN_COL, before[selCol] - half)
+        widths.splice(selCol + 1, 0, half)
+      } else if (table.firstChild.childCount !== before.length) return
+      const tr = v.state.tr
+      table.forEach((row, rowOffset) =>
+        row.forEach((cell, cellOffset, i) => {
+          if (cell.attrs.colwidth?.[0] !== widths[i]) {
+            tr.setNodeMarkup(tableStart + rowOffset + 1 + cellOffset, null, { ...cell.attrs, colwidth: [widths[i]] })
+          }
+        }),
+      )
+      if (tr.docChanged) v.dispatch(tr.setMeta('addToHistory', false))
+    })
     requestAnimationFrame(updateTableBar)
   }
 
@@ -374,7 +419,7 @@ export default function RichEditor({ defaultValue, getMarkdownRef, onError, onNo
           <button type="button" title="열 추가" onClick={() => runTableCommand(addColAfterCommand)}>＋ 열</button>
           <button type="button" title="행 추가" onClick={() => runTableCommand(addRowAfterCommand)}>＋ 행</button>
           <button type="button" title={tableBar.cols <= 1 ? '마지막 열은 지울 수 없어요 (표를 지우려면 표 삭제)' : '열 삭제'} disabled={tableBar.cols <= 1} onClick={() => runTableEdit(deleteColumn)}>－ 열</button>
-          <button type="button" title={tableBar.inHeader ? '맨 윗줄(제목 행)은 삭제할 수 없어요' : tableBar.rows <= 2 ? '마지막 행은 지울 수 없어요 (표를 지우려면 표 삭제)' : '행 삭제'} disabled={tableBar.inHeader || tableBar.rows <= 2} onClick={() => runTableEdit(deleteRow)}>－ 행</button>
+          <button type="button" title={tableBar.rows <= 2 ? '마지막 행은 지울 수 없어요 (표를 지우려면 표 삭제)' : tableBar.inHeader ? '제목 행 바로 아래 행 삭제 (제목 행은 삭제할 수 없어요)' : '행 삭제'} disabled={tableBar.rows <= 2} onClick={() => runTableEdit(tableBar.inHeader ? deleteRowBelowHeader : deleteRow)}>－ 행</button>
           <button type="button" className="danger" title="표 삭제" onClick={() => runTableEdit(deleteTable, false)}>표 삭제</button>
         </div>
       )}
