@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import RichEditor from '../components/RichEditor.jsx'
+import CategoryInput from '../components/CategoryInput.jsx'
+import TagInput from '../components/TagInput.jsx'
 import { api } from '../api.js'
 
 export default function Editor() {
   const { ref } = useParams() // 있으면 수정, 없으면 새 글
   const navigate = useNavigate()
   const [title, setTitle] = useState('')
-  const [tags, setTags] = useState('')
+  const [tags, setTags] = useState([])
   const [category, setCategory] = useState('')
   const [isPrivate, setIsPrivate] = useState(false)
   const [known, setKnown] = useState([])
@@ -33,7 +35,7 @@ export default function Editor() {
       .then((p) => {
         if (stale) return
         setTitle(p.title)
-        setTags(p.tags.join(', '))
+        setTags(p.tags)
         setCategory(p.category || '')
         setIsPrivate(p.private)
         setContent(p.content)
@@ -54,7 +56,7 @@ export default function Editor() {
       content: getMarkdown.current(),
       category,
       private: isPrivate,
-      tags: tags.split(',').map((t) => t.trim().replace(/^#/, '')).filter(Boolean),
+      tags,
     }
     try {
       const saved = ref ? await api.update(ref, payload) : await api.create(payload)
@@ -83,22 +85,8 @@ export default function Editor() {
           <span className="switch-label">{isPrivate ? '비공개' : '공개'}</span>
         </label>
       </div>
-      <input
-        className="cat-input"
-        list="known-categories"
-        placeholder="카테고리 (언어: 영어, 일본어, 독일어 …)"
-        value={category}
-        onChange={(e) => setCategory(e.target.value)}
-      />
-      <datalist id="known-categories">
-        {known.map((c) => <option key={c} value={c} />)}
-      </datalist>
-      <input
-        className="tags-input"
-        placeholder="태그 (쉼표로 구분: 음운론, 형태론)"
-        value={tags}
-        onChange={(e) => setTags(e.target.value)}
-      />
+      <CategoryInput value={category} onChange={setCategory} known={known} />
+      <TagInput tags={tags} onChange={setTags} />
       <RichEditor key={ref || 'new'} defaultValue={content} getMarkdownRef={getMarkdown} onError={setStatus} onNotice={setStatus} />
       <div className="editor-bar">
         {status && <span className="status">{status}</span>}
