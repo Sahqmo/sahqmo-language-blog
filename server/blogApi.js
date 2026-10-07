@@ -1,6 +1,7 @@
 // 로컬 파일 기반 저장소 API (Vite dev/preview 서버에 붙는 미들웨어)
 //   content/posts/<slug>.md   글 (frontmatter + markdown 본문)
 //   content/images/<file>     업로드된 이미지/첨부 파일
+import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { handleAuth, isAuthed } from './auth.js'
@@ -105,6 +106,7 @@ function summarize(slug, meta, body) {
     .slice(0, 220)
   return {
     id: meta.id,
+    private: meta.private === true,
     slug,
     title: meta.title || slug,
     date: meta.date || '',
@@ -117,8 +119,8 @@ function summarize(slug, meta, body) {
 
 // ---------- 글 번호(id) ----------
 // 파일명(slug)은 사람이 알아보기 위한 이름일 뿐이고, 글의 식별자는 frontmatter 의 id 입니다.
-// 번호는 content/meta.json 의 nextId 로 관리해서 글을 삭제해도 재사용되지 않습니다.
-const META_FILE = path.join(ROOT, 'meta.json')
+// id 는 무작위 16진수 5자리 코드(예: "a3f9c")입니다.
+const isCode = (id) => typeof id === 'string' && /^[0-9a-f]{5}$/.test(id)
 let queue = Promise.resolve()
 const locked = (fn) => {
   const run = queue.then(fn)
@@ -126,50 +128,58 @@ const locked = (fn) => {
   return run
 }
 
+const newId = (taken) => {
+  let id
+  do id = crypto.randomBytes(3).toString('hex').slice(0, 5)
+  while (taken.has(id))
+  return id
+}
+
+// 파일별 파싱 결과 캐시: 수정 시각/크기가 같으면 다시 읽지 않음
+const fileCache = new Map() // 파일명 → { stamp, meta, body }
+
 async function loadAll() {
   const files = (await fs.readdir(POSTS)).filter((f) => f.endsWith('.md'))
+  for (const f of fileCache.keys()) if (!files.includes(f)) fileCache.delete(f)
   return Promise.all(
     files.map(async (f) => {
-      const { meta, body } = parseFile(await fs.readFile(path.join(POSTS, f), 'utf8'))
-      return { slug: f.slice(0, -3), meta, body }
+      const file = path.join(POSTS, f)
+      const st = await fs.stat(file)
+      const stamp = `${st.mtimeMs}:${st.size}`
+      let hit = fileCache.get(f)
+      if (!hit || hit.stamp !== stamp) {
+        hit = { stamp, ...parseFile(await fs.readFile(file, 'utf8')) }
+        fileCache.set(f, hit)
+      }
+      return { slug: f.slice(0, -3), meta: hit.meta, body: hit.body }
     }),
   )
 }
 
-async function readNextId() {
-  try {
-    return Number(JSON.parse(await fs.readFile(META_FILE, 'utf8')).nextId) || 1
-  } catch {
-    return 1
-  }
-}
-
-// id 가 없는 기존 글에 오래된 순으로 번호를 매기고, 전체 글 목록을 돌려줌 (반드시 locked 안에서 호출)
+// 코드 형식이 아닌 id(없음/예전 순번)를 가진 글에 새 코드를 부여하고, 전체 글 목록을 돌려줌 (반드시 locked 안에서 호출)
 async function loadWithIds() {
   const all = await loadAll()
-  const maxId = Math.max(0, ...all.map((p) => Number(p.meta.id) || 0))
-  let next = Math.max(await readNextId(), maxId + 1)
-  const missing = all.filter((p) => !Number.isInteger(p.meta.id)).sort((a, b) => (a.meta.date || '').localeCompare(b.meta.date || ''))
-  for (const p of missing) {
-    p.meta = { id: next++, ...p.meta }
-    await fs.writeFile(path.join(POSTS, `${p.slug}.md`), serializeFile(p.meta, p.body))
+  const taken = new Set(all.map((p) => p.meta.id).filter(isCode))
+  for (const p of all) {
+    if (isCode(p.meta.id)) continue
+    const id = newId(taken)
+    taken.add(id)
+    p.meta = { ...p.meta, id }
+    await fs.writeFile(path.join(POSTS, `${p.slug}.md`), serializeFile({ id, ...p.meta }, p.body))
   }
-  if (missing.length || next !== (await readNextId())) {
-    await fs.writeFile(META_FILE, JSON.stringify({ nextId: next }, null, 2))
-  }
-  return { all, nextId: next }
+  return { all, taken }
 }
 
-// 주소의 식별자: 숫자면 id, 아니면 (예전 주소) 파일명 slug
-const findPost = (all, ref) =>
-  /^\d+$/.test(ref) ? all.find((p) => p.meta.id === Number(ref)) : all.find((p) => p.slug === ref)
+// 주소의 식별자: id 코드, 아니면 (예전 주소) 파일명 slug
+const findPost = (all, ref) => all.find((p) => p.meta.id === ref) || all.find((p) => p.slug === ref)
 
 const toPost = (p) => ({ ...summarize(p.slug, p.meta, p.body), content: p.body })
 
-const listPosts = () =>
+const listPosts = (authed) =>
   locked(async () => {
     const { all } = await loadWithIds()
     return all
+      .filter((p) => authed || p.meta.private !== true)
       .map((p) => summarize(p.slug, p.meta, p.body))
       .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
   })
@@ -191,34 +201,36 @@ async function handle(req, res, url) {
   if (parts[0] === 'posts') {
     const ref = parts[1]
 
-    if (!ref && req.method === 'GET') return send(res, 200, await listPosts())
+    if (!ref && req.method === 'GET') return send(res, 200, await listPosts(await isAuthed(req)))
 
     if (!ref && req.method === 'POST') {
-      const { title = '', content = '', tags, category = '' } = await readJson(req)
+      const { title = '', content = '', tags, category = '', private: isPrivate = false } = await readJson(req)
       if (!title.trim()) return send(res, 400, { error: '제목을 입력해 주세요.' })
       const created = await locked(async () => {
-        const { nextId } = await loadWithIds()
+        const { taken } = await loadWithIds()
         const base = slugify(title)
         let s = base
         for (let n = 2; await exists(path.join(POSTS, `${s}.md`)); n++) s = `${base}-${n}`
         const meta = {
-          id: nextId,
+          id: newId(taken),
           title: title.trim(),
           date: new Date().toISOString(),
           category: String(category).trim(),
           tags: cleanTags(tags),
+          ...(isPrivate === true && { private: true, firstPublish: true }),
         }
         await fs.writeFile(path.join(POSTS, `${s}.md`), serializeFile(meta, content))
-        await fs.writeFile(META_FILE, JSON.stringify({ nextId: nextId + 1 }, null, 2))
         return toPost({ slug: s, meta, body: content.replace(/^\n+/, '') })
       })
       return send(res, 201, created)
     }
 
     if (ref && req.method === 'GET') {
+      const authed = await isAuthed(req)
       const post = await locked(async () => {
         const found = findPost((await loadWithIds()).all, ref)
-        return found && toPost(found)
+        // 비공개 글은 로그인한 사람에게만 보임 (없는 글과 똑같이 404)
+        return found && (found.meta.private !== true || authed) ? toPost(found) : null
       })
       return post ? send(res, 200, post) : send(res, 404, { error: 'Not found' })
     }
@@ -228,15 +240,20 @@ async function handle(req, res, url) {
       const result = await locked(async () => {
         const old = findPost((await loadWithIds()).all, ref)
         if (!old) return { status: 404, data: { error: 'Not found' } }
-        const { title = old.meta.title, content = old.body, tags = old.meta.tags, category = old.meta.category } = body
+        const { title = old.meta.title, content = old.body, tags = old.meta.tags, category = old.meta.category, private: isPrivate = old.meta.private === true } = body
         if (!title.trim()) return { status: 400, data: { error: '제목을 입력해 주세요.' } }
+        // 비공개로 만든 글을 처음 공개하는 순간만 '게시 시각'을 지금으로 갱신 (이후 비공개↔공개 전환에는 적용 안 함)
+        const publishing = isPrivate !== true && old.meta.firstPublish === true
+        const now = new Date().toISOString()
         const meta = {
           id: old.meta.id,
           title: title.trim(),
-          date: old.meta.date,
-          updated: new Date().toISOString(),
+          date: publishing ? now : old.meta.date,
+          ...((!publishing && { updated: now }) || (old.meta.updated && { updated: old.meta.updated })),
           category: String(category ?? '').trim(),
           tags: cleanTags(tags),
+          ...(isPrivate === true && { private: true }),
+          ...(isPrivate === true && old.meta.firstPublish === true && { firstPublish: true }),
         }
         await fs.writeFile(path.join(POSTS, `${old.slug}.md`), serializeFile(meta, content))
         return { status: 200, data: toPost({ slug: old.slug, meta, body: content.replace(/^\n+/, '') }) }
@@ -277,6 +294,8 @@ async function serveImage(req, res, url) {
   }
   res.setHeader('Content-Security-Policy', 'sandbox')
   res.setHeader('Content-Type', MIME[path.extname(name).toLowerCase()] || 'application/octet-stream')
+  // 파일명에 업로드 시각이 들어 있어 내용이 바뀌지 않음 → 오래 캐시
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
   res.end(await fs.readFile(file))
 }
 

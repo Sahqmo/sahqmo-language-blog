@@ -9,6 +9,7 @@ export default function Editor() {
   const [title, setTitle] = useState('')
   const [tags, setTags] = useState('')
   const [category, setCategory] = useState('')
+  const [isPrivate, setIsPrivate] = useState(false)
   const [known, setKnown] = useState([])
   const [content, setContent] = useState('') // 불러온 원본 (에디터 초기값)
   const getMarkdown = useRef(() => '')
@@ -17,21 +18,31 @@ export default function Editor() {
   const [status, setStatus] = useState('')
 
   useEffect(() => {
-    api.list().then((ps) => setKnown([...new Set(ps.map((p) => p.category).filter(Boolean))])).catch(() => {})
+    let stale = false
+    api.list().then((ps) => !stale && setKnown([...new Set(ps.map((p) => p.category).filter(Boolean))])).catch(() => {})
+    return () => {
+      stale = true
+    }
   }, [])
 
   useEffect(() => {
     if (!ref) return
+    let stale = false
     api
       .get(ref)
       .then((p) => {
+        if (stale) return
         setTitle(p.title)
         setTags(p.tags.join(', '))
         setCategory(p.category || '')
+        setIsPrivate(p.private)
         setContent(p.content)
       })
-      .catch((e) => setStatus(e.message))
-      .finally(() => setLoading(false))
+      .catch((e) => !stale && setStatus(e.message))
+      .finally(() => !stale && setLoading(false))
+    return () => {
+      stale = true
+    }
   }, [ref])
 
   async function save() {
@@ -42,6 +53,7 @@ export default function Editor() {
       title,
       content: getMarkdown.current(),
       category,
+      private: isPrivate,
       tags: tags.split(',').map((t) => t.trim().replace(/^#/, '')).filter(Boolean),
     }
     try {
@@ -57,13 +69,20 @@ export default function Editor() {
 
   return (
     <section className="editor">
-      <input
-        className="title-input"
-        placeholder="제목"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        autoFocus
-      />
+      <div className="title-row">
+        <input
+          className="title-input"
+          placeholder="제목"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          autoFocus
+        />
+        <label className="switch" title="비공개 글은 로그인한 나에게만 보여요">
+          <input type="checkbox" role="switch" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
+          <span className="switch-track" />
+          <span className="switch-label">{isPrivate ? '비공개' : '공개'}</span>
+        </label>
+      </div>
       <input
         className="cat-input"
         list="known-categories"
@@ -80,9 +99,9 @@ export default function Editor() {
         value={tags}
         onChange={(e) => setTags(e.target.value)}
       />
-      <RichEditor key={ref || 'new'} defaultValue={content} getMarkdownRef={getMarkdown} onError={setStatus} />
+      <RichEditor key={ref || 'new'} defaultValue={content} getMarkdownRef={getMarkdown} onError={setStatus} onNotice={setStatus} />
       <div className="editor-bar">
-        <span className="status">{status}</span>
+        {status && <span className="status">{status}</span>}
         <button className="btn ghost" onClick={() => navigate(-1)}>취소</button>
         <button className="btn" onClick={save} disabled={saving}>
           {saving ? '저장 중…' : ref ? '수정 저장' : '발행'}

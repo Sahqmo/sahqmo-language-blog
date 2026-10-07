@@ -13,6 +13,7 @@ export default function PostCard({ p }) {
     <Link to={`/post/${p.id}`} className="post-card">
       <div className="card-meta">
         <time>{formatDate(p.date)}</time>
+        {p.private && <span className="lock">🔒 비공개</span>}
         {p.category && <span className="cat">{p.category}</span>}
       </div>
       <h2>{p.title}</h2>

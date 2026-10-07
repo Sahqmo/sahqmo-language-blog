@@ -11,16 +11,32 @@ const json = (method, body) => ({
   body: JSON.stringify(body),
 })
 
+// 글 목록은 여러 화면(홈/태그/에디터)이 쓰므로 잠시 재사용. 글·로그인 상태가 바뀌면 비움
+const LIST_TTL = 30_000
+let listCache = null // { promise, at }
+const changed = (data) => {
+  listCache = null
+  return data
+}
+
 export const api = {
   authStatus: () => request('/api/auth/status'),
-  login: (password) => request('/api/auth/login', json('POST', { password })),
-  setupPassword: (password) => request('/api/auth/setup', json('POST', { password })),
-  logout: () => request('/api/auth/logout', { method: 'POST' }),
-  list: () => request('/api/posts'),
+  login: (password) => request('/api/auth/login', json('POST', { password })).then(changed),
+  setupPassword: (password) => request('/api/auth/setup', json('POST', { password })).then(changed),
+  logout: () => request('/api/auth/logout', { method: 'POST' }).then(changed),
+  list: () => {
+    if (!listCache || Date.now() - listCache.at > LIST_TTL) {
+      const promise = request('/api/posts')
+      const entry = { promise, at: Date.now() }
+      listCache = entry
+      promise.catch(() => listCache === entry && (listCache = null))
+    }
+    return listCache.promise
+  },
   get: (ref) => request(`/api/posts/${encodeURIComponent(ref)}`),
-  create: (post) => request('/api/posts', json('POST', post)),
-  update: (ref, post) => request(`/api/posts/${encodeURIComponent(ref)}`, json('PUT', post)),
-  remove: (ref) => request(`/api/posts/${encodeURIComponent(ref)}`, { method: 'DELETE' }),
+  create: (post) => request('/api/posts', json('POST', post)).then(changed),
+  update: (ref, post) => request(`/api/posts/${encodeURIComponent(ref)}`, json('PUT', post)).then(changed),
+  remove: (ref) => request(`/api/posts/${encodeURIComponent(ref)}`, { method: 'DELETE' }).then(changed),
   upload: (file) =>
     request(`/api/upload?name=${encodeURIComponent(file.name || 'image.png')}`, {
       method: 'POST',

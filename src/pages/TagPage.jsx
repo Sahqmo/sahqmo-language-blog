@@ -9,9 +9,12 @@ export default function TagPage() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    setPosts(null)
-    api.list().then(setPosts).catch((e) => setError(e.message))
-  }, [tag])
+    let stale = false
+    api.list().then((p) => !stale && setPosts(p)).catch((e) => !stale && setError(e.message))
+    return () => {
+      stale = true
+    }
+  }, [])
 
   if (error) return <p className="state error">{error}</p>
   if (!posts) return <p className="state">불러오는 중…</p>
@@ -19,7 +22,7 @@ export default function TagPage() {
   const matched = posts.filter((p) => p.tags.includes(tag))
   return (
     <section>
-      <Link to="/" className="back">← 글 목록</Link>
+      <Link to="/posts" className="back">← 글 목록</Link>
       <div className="tag-head">
         <h1>#{tag}</h1>
         <span>{matched.length}편</span>

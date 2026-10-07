@@ -2,8 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, formatDate } from '../api.js'
 import { useAuth } from '../auth.jsx'
-import Reveal from '../components/Reveal.jsx'
-import PostCard from '../components/PostCard.jsx'
+import PostBrowser from '../components/PostBrowser.jsx'
 import CategoryDonut, { UNCATEGORIZED, countCategories } from '../components/CategoryDonut.jsx'
 
 // 새로고침(첫 진입) 때만 첫 화면 섹션들을 순서대로 등장시킴. 이후 SPA 내 이동에서는 생략
@@ -15,7 +14,6 @@ export default function Home() {
   const category = params.get('category') || ''
   const [posts, setPosts] = useState(null)
   const [error, setError] = useState('')
-  const [query, setQuery] = useState('')
   const listRef = useRef(null)
   const [intro] = useState(() => !heroPlayed)
   useEffect(() => {
@@ -23,7 +21,11 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    api.list().then(setPosts).catch((e) => setError(e.message))
+    let stale = false
+    api.list().then((p) => !stale && setPosts(p)).catch((e) => !stale && setError(e.message))
+    return () => {
+      stale = true
+    }
   }, [])
 
   // 카테고리를 고르면(차트 범례·카드·칩) 아래쪽 목록으로 부드럽게 이동
@@ -32,16 +34,6 @@ export default function Home() {
   }, [category, posts])
 
   const cats = useMemo(() => (posts ? countCategories(posts) : []), [posts])
-
-  const filtered = useMemo(() => {
-    if (!posts) return []
-    const q = query.trim().toLowerCase()
-    return posts.filter(
-      (p) =>
-        (!category || (p.category || UNCATEGORIZED) === category) &&
-        (!q || [p.title, p.excerpt, p.category, ...p.tags].some((s) => (s || '').toLowerCase().includes(q))),
-    )
-  }, [posts, query, category])
 
   if (error) return <p className="state error">{error}</p>
   if (!posts) return <p className="state">불러오는 중…</p>
@@ -61,6 +53,7 @@ export default function Home() {
             <h3 className="panel-title">가장 최근 글</h3>
             <div className="card-meta">
               <time>{formatDate(latest.date)}</time>
+              {latest.private && <span className="lock">🔒 비공개</span>}
               {latest.category && <span className="cat">{latest.category}</span>}
             </div>
             <h2>{latest.title}</h2>
@@ -81,41 +74,39 @@ export default function Home() {
         </div>
       </section>
 
-      {(
-        <section className="block">
-          <h3 className={`section-title ${intro ? 'enter' : ''}`} style={intro ? { '--i': 2 } : undefined}>많이 쓴 카테고리</h3>
-          <div className="cat-grid">
-            {topCats.map((c, i) => (
-              <div key={c ? c.name : `empty-${i}`} className={`panel cat-panel ${c ? '' : 'is-empty'} ${intro ? 'enter' : ''}`} style={intro ? { '--i': 3 + i } : undefined}>
-                {c ? (
-                  <button className="cat-head" onClick={() => setCategory(c.name)}>
-                    <i style={{ background: c.color }} />
-                    <strong>{c.name}</strong>
-                    <span>{c.count}편</span>
-                  </button>
-                ) : (
-                  <div className="cat-head">
-                    <i />
-                    <strong>카테고리</strong>
-                    <span>0편</span>
-                  </div>
-                )}
-                <ul>
-                  {c &&
-                    posts
-                      .filter((p) => (p.category || UNCATEGORIZED) === c.name)
-                      .slice(0, 5)
-                      .map((p) => (
-                        <li key={p.id}>
-                          <Link to={`/post/${p.id}`}><span>{p.title}</span></Link>
-                        </li>
-                      ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      <section className="block">
+        <h3 className={`section-title ${intro ? 'enter' : ''}`} style={intro ? { '--i': 2 } : undefined}>많이 쓴 카테고리</h3>
+        <div className="cat-grid">
+          {topCats.map((c, i) => (
+            <div key={c ? c.name : `empty-${i}`} className={`panel cat-panel ${c ? '' : 'is-empty'} ${intro ? 'enter' : ''}`} style={intro ? { '--i': 3 + i } : undefined}>
+              {c ? (
+                <button className="cat-head" onClick={() => setCategory(c.name)}>
+                  <i style={{ background: c.color }} />
+                  <strong>{c.name}</strong>
+                  <span>{c.count}편</span>
+                </button>
+              ) : (
+                <div className="cat-head">
+                  <i />
+                  <strong>카테고리</strong>
+                  <span>0편</span>
+                </div>
+              )}
+              <ul>
+                {c &&
+                  posts
+                    .filter((p) => (p.category || UNCATEGORIZED) === c.name)
+                    .slice(0, 5)
+                    .map((p) => (
+                      <li key={p.id}>
+                        <Link to={`/post/${p.id}`}><span>{p.title}</span></Link>
+                      </li>
+                    ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <a href="#recent" className={`scroll-hint ${intro ? 'enter-fade' : ''}`} aria-label="아래로 스크롤" style={intro ? { '--i': 6 } : undefined} onClick={(e) => { e.preventDefault(); listRef.current?.scrollIntoView({ behavior: 'smooth' }) }}>
         <span>글 목록</span>
@@ -123,33 +114,15 @@ export default function Home() {
       </a>
       </div>
 
-      <section className="block list-section" id="recent" ref={listRef}>
-        <h3 className="section-title">{category ? `${category} 글` : '최근 게시된 글'}</h3>
-        <div className="filters">
-          <button className={`chip ${!category ? 'on' : ''}`} onClick={() => setCategory('')}>전체</button>
-          {cats.map((c) => (
-            <button key={c.name} className={`chip ${category === c.name ? 'on' : ''}`} onClick={() => setCategory(c.name)}>
-              {c.name}
-            </button>
-          ))}
-        </div>
-        <input
-          className="search"
-          type="search"
-          placeholder="제목, 내용, 태그 검색"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        {filtered.length === 0 ? (
-          <p className="state">{hasPosts ? '해당하는 글이 없어요.' : '아직 작성된 글이 없어요.'}</p>
-        ) : (
-          <ul className="post-list">
-            {(category || query ? filtered : filtered.slice(0, 8)).map((p, i) => (
-              <Reveal as="li" key={p.id} delay={(i % 4) * 60}><PostCard p={p} /></Reveal>
-            ))}
-          </ul>
-        )}
-      </section>
+      <PostBrowser
+        ref={listRef}
+        posts={posts}
+        cats={cats}
+        category={category}
+        onCategory={setCategory}
+        title="최근 게시된 글"
+        limit={8}
+      />
     </>
   )
 }
