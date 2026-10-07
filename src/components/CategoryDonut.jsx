@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 
 // 카테고리별 고정 순서 색상 (라이트/다크 모두에서 구분되는 차분한 톤)
@@ -56,13 +57,16 @@ export default function CategoryDonut({ data, total }) {
           </li>
         ))}
       </ul>
-      {tip && (
-        <div className="donut-tip" style={{ left: tip.x, top: tip.y }}>
-          <i style={{ background: tip.d.color }} />
-          {tip.d.name} {Math.round((tip.d.count / total) * 100)}%
-          <small>{tip.d.count}편</small>
-        </div>
-      )}
+      {/* 마우스 좌표(fixed)로 띄우는 말풍선은 body 로 빼냄: 조상에 transform/애니메이션이 걸려 있으면 fixed 의 기준이 그 조상으로 바뀌어 위치가 어긋나거나 잘림 */}
+      {tip &&
+        createPortal(
+          <div className="donut-tip" style={{ left: tip.x, top: tip.y }}>
+            <i style={{ background: tip.d.color }} />
+            {tip.d.name} {Math.round((tip.d.count / total) * 100)}%
+            <small>{tip.d.count}편</small>
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }

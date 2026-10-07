@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { UNCATEGORIZED } from './CategoryDonut.jsx'
+import { Rel } from './DateLabel.jsx'
 
 const INTERVAL = 5000
 
@@ -8,10 +9,16 @@ const INTERVAL = 5000
 // 마우스를 올리거나 키보드 포커스가 있으면 멈추고, 점/화살표로 직접 넘길 수도 있음.
 export default function CategoryCarousel({ cats, posts, onSelect, intro }) {
   const n = cats.length
+  // 카테고리별 최근 글 5개 (슬라이드가 넘어갈 때마다 다시 거르지 않도록 글/카테고리가 바뀔 때만 계산)
+  const recent = useMemo(
+    () => cats.map((c) => posts.filter((p) => (p.category || UNCATEGORIZED) === c.name).slice(0, 5)),
+    [cats, posts],
+  )
   const [index, setIndex] = useState(0)
   const [paused, setPaused] = useState(false)
   const prevOff = useRef([])
   const reduced = useRef(false)
+  const touchX = useRef(0)
 
   useEffect(() => {
     reduced.current = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -48,10 +55,17 @@ export default function CategoryCarousel({ cats, posts, onSelect, intro }) {
     <div
       className={`cat-carousel ${intro ? 'enter' : ''}`}
       style={intro ? { '--i': 3 } : undefined}
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-      onFocus={() => setPaused(true)}
+      // 터치 기기에서는 탭 한 번에 마우스 이벤트가 남아 영영 멈추는 일이 없도록, 마우스 포인터와 키보드 포커스일 때만 멈춤
+      onPointerEnter={(e) => e.pointerType === 'mouse' && setPaused(true)}
+      onPointerLeave={() => setPaused(false)}
+      onFocus={(e) => e.target.matches(':focus-visible') && setPaused(true)}
       onBlur={() => setPaused(false)}
+      onTouchStart={(e) => (touchX.current = e.touches[0].clientX)}
+      onTouchEnd={(e) => {
+        // 좌우로 밀어서 넘기기 (왼쪽으로 밀면 다음, 오른쪽으로 밀면 이전)
+        const dx = e.changedTouches[0].clientX - touchX.current
+        if (Math.abs(dx) > 40) go(index + (dx < 0 ? 1 : -1))
+      }}
     >
       <div className="cat-viewport">
         {cats.map((c, i) => {
@@ -75,14 +89,14 @@ export default function CategoryCarousel({ cats, posts, onSelect, intro }) {
                   <span>{c.count}편</span>
                 </button>
                 <ul>
-                  {posts
-                    .filter((p) => (p.category || UNCATEGORIZED) === c.name)
-                    .slice(0, 5)
-                    .map((p) => (
-                      <li key={p.id}>
-                        <Link to={`/post/${p.id}`}><span>{p.title}</span></Link>
-                      </li>
-                    ))}
+                  {recent[i].map((p) => (
+                    <li key={p.id}>
+                      <Link to={`/post/${p.id}`}>
+                        <span>{p.title}</span>
+                        <Rel iso={p.date} className="rel" />
+                      </Link>
+                    </li>
+                  ))}
                 </ul>
               </div>
             </div>
