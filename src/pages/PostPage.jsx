@@ -1,34 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import remarkBreaks from 'remark-breaks'
-import remarkBr from '../remarkBr.js'
 import { api, formatDateTime } from '../api.js'
-import { embedUrl, parseYouTube } from '../youtube.js'
 import { useAuth } from '../auth.jsx'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
-
-// 혼자 한 줄에 있는 유튜브 링크 문단은 영상 플레이어로, 나머지는 평소처럼 렌더링
-function Paragraph({ node, children, ...props }) {
-  const kids = node.children.filter((c) => !(c.type === 'text' && !c.value.trim()))
-  const yt = kids.length === 1 && kids[0].tagName === 'a' ? parseYouTube(kids[0].properties.href) : null
-  if (!yt) return <p {...props}>{children}</p>
-  return (
-    <div className="yt-embed">
-      <iframe
-        src={embedUrl(yt)}
-        title="YouTube 영상"
-        loading="lazy"
-        allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-        referrerPolicy="strict-origin-when-cross-origin"
-        allowFullScreen
-      />
-    </div>
-  )
-}
-const mdComponents = { p: Paragraph }
-const remarkPlugins = [remarkGfm, remarkBreaks, remarkBr]
+import PostMarkdown from '../PostMarkdown.jsx'
 
 export default function PostPage() {
   const { ref } = useParams()
@@ -104,7 +79,7 @@ export default function PostPage() {
         )}
       </header>
       <div className="prose">
-        <ReactMarkdown remarkPlugins={remarkPlugins} components={mdComponents}>{post.content}</ReactMarkdown>
+        <PostMarkdown>{post.content}</PostMarkdown>
       </div>
       {loggedIn && (
         <footer className="post-actions">

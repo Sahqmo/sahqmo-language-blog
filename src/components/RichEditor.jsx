@@ -1,12 +1,16 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Crepe } from '@milkdown/crepe'
 import { insert } from '@milkdown/utils'
-import { commandsCtx, remarkPluginsCtx } from '@milkdown/kit/core'
+import { commandsCtx, editorViewCtx, remarkPluginsCtx } from '@milkdown/kit/core'
 import { clearTextInCurrentBlockCommand } from '@milkdown/kit/preset/commonmark'
+import { addColAfterCommand, addRowAfterCommand, tableCellSchema, tableHeaderSchema } from '@milkdown/kit/preset/gfm'
+import { deleteColumn, deleteRow, deleteTable } from '@milkdown/kit/prose/tables'
+import { Selection } from '@milkdown/kit/prose/state'
 import '@milkdown/crepe/theme/common/style.css'
 import '@milkdown/crepe/theme/frame.css'
 import { api } from '../api.js'
 import { isYouTubeUrl, parseYouTube } from '../youtube.js'
+import { extractWidths, injectWidths } from '../tableWidths.js'
 
 async function uploadImage(file) {
   const { url } = await api.upload(file)
@@ -22,6 +26,91 @@ const fixImageTitle = () => (tree) => {
     node.children?.forEach(walk)
   }
   walk(tree)
+}
+
+// ---------- 표 열 너비 ----------
+// 셀의 colwidth([px]) 속성은 기본 스키마에 이미 있지만 화면에는 반영되지 않아서, 셀 DOM 에 너비 스타일을 붙여 줌
+const withColWidth = (schema) =>
+  schema.extendSchema((prev) => (ctx) => {
+    const base = prev(ctx)
+    return {
+      ...base,
+      toDOM: (node) => {
+        const spec = base.toDOM(node)
+        const w = node.attrs.colwidth?.[0]
+        if (w) spec[1] = { ...spec[1], style: `${spec[1]?.style ?? ''};width:${w}px;min-width:${w}px;max-width:${w}px` }
+        return spec
+      },
+    }
+  })
+const colWidthPlugins = [withColWidth(tableCellSchema), withColWidth(tableHeaderSchema)]
+
+const MIN_COL = 60
+const GRAB = 5 // 셀 오른쪽 테두리에서 이 픽셀 안쪽이면 너비 조절 영역
+
+// 마우스 위치 아래에서 "너비를 조절할 수 있는 열 테두리"를 찾음 → { cell, table, index } | null
+function borderAt(e) {
+  const block = e.target.closest?.('.milkdown-table-block')
+  if (!block || e.target.closest('.add-button, .button-group')) return null
+  for (const cell of block.querySelectorAll('td, th')) {
+    const r = cell.getBoundingClientRect()
+    if (e.clientY >= r.top && e.clientY <= r.bottom && Math.abs(e.clientX - r.right) <= GRAB) {
+      return { cell, table: cell.closest('table'), index: cell.cellIndex }
+    }
+  }
+  return null
+}
+
+// 표의 모든 행에서 열 너비(px)를 문서에 기록
+function setColumnWidths(view, tableEl, widths) {
+  const first = tableEl.querySelector('td, th')
+  if (!first) return
+  const $pos = view.state.doc.resolve(view.posAtDOM(first, 0))
+  let d = $pos.depth
+  while (d > 0 && $pos.node(d).type.spec.tableRole !== 'table') d--
+  if (!d) return
+  const start = $pos.start(d)
+  const tr = view.state.tr
+  $pos.node(d).forEach((row, rowOffset) => {
+    row.forEach((cell, cellOffset, i) => {
+      if (widths[i] && cell.attrs.colwidth?.[0] !== widths[i]) {
+        tr.setNodeMarkup(start + rowOffset + 1 + cellOffset, null, { ...cell.attrs, colwidth: [widths[i]] })
+      }
+    })
+  })
+  if (tr.docChanged) view.dispatch(tr)
+}
+
+// 문서 안 표들의 열 너비 목록 (표 순서대로, 너비를 바꾼 적 없는 표는 null)
+function collectWidths(doc) {
+  const out = []
+  doc.descendants((node) => {
+    if (node.type.spec.tableRole !== 'table') return
+    const widths = []
+    node.firstChild?.forEach((cell) => widths.push(cell.attrs.colwidth?.[0] ?? 0))
+    out.push(widths.length && widths.every(Boolean) ? widths : null)
+    return false
+  })
+  return out
+}
+
+// 불러온 너비를 문서의 표들에 적용 (열 개수가 다르면 무시)
+function applyWidths(view, widths) {
+  const tr = view.state.tr
+  let k = 0
+  view.state.doc.descendants((node, pos) => {
+    if (node.type.spec.tableRole !== 'table') return
+    const w = widths[k++]
+    if (w && node.firstChild?.childCount === w.length) {
+      node.forEach((row, rowOffset) =>
+        row.forEach((cell, cellOffset, i) =>
+          tr.setNodeMarkup(pos + 1 + rowOffset + 1 + cellOffset, null, { ...cell.attrs, colwidth: [w[i]] }),
+        ),
+      )
+    }
+    return false
+  })
+  if (tr.docChanged) view.dispatch(tr.setMeta('addToHistory', false))
 }
 
 const YOUTUBE_ICON =
@@ -41,13 +130,126 @@ const youtubeMarkdown = (url) => {
 export default function RichEditor({ defaultValue, getMarkdownRef, onError, onNotice }) {
   const rootRef = useRef(null)
   const crepeRef = useRef(null)
+  const [tableBar, setTableBar] = useState(null) // 커서가 표 안에 있을 때 표 아래에 띄우는 열/행 추가 버튼 위치
+
+  // 표 기본 컨트롤은 셀 테두리 근처에 마우스를 가져가야만 '+'가 나타나서 찾기 어려움 → 표 안에 있을 때 항상 보이는 버튼 제공
+  const updateTableBar = useCallback(() => {
+    const root = rootRef.current
+    const node = window.getSelection()?.anchorNode
+    const el = node && (node.nodeType === 1 ? node : node.parentElement)
+    const table = el?.closest('table')
+    if (!root || !table || !root.contains(table)) return setTableBar(null)
+    const t = table.getBoundingClientRect()
+    const r = root.getBoundingClientRect()
+    setTableBar({ top: t.bottom - r.top + 6, left: t.left - r.left, width: t.width, inHeader: !!el.closest('th'), cols: table.rows[0]?.cells.length ?? 0, rows: table.rows.length })
+  }, [])
+
+  useEffect(() => {
+    document.addEventListener('selectionchange', updateTableBar)
+    window.addEventListener('resize', updateTableBar)
+    return () => {
+      document.removeEventListener('selectionchange', updateTableBar)
+      window.removeEventListener('resize', updateTableBar)
+    }
+  }, [updateTableBar])
+
+  // 열 테두리를 끌어 너비 조절 (노션처럼): 끄는 열은 늘고 오른쪽 열은 줄어 표 전체 폭은 유지
+  useEffect(() => {
+    const root = rootRef.current
+    let drag = null
+    const view = () => crepeRef.current?.editor.action((ctx) => ctx.get(editorViewCtx))
+
+    const onMove = (e) => {
+      if (!drag) return root.classList.toggle('col-resize', !!borderAt(e))
+      const { widths, index, startX } = drag
+      const next = widths.slice()
+      let dx = e.clientX - startX
+      if (index < widths.length - 1) {
+        dx = Math.max(MIN_COL - widths[index], Math.min(dx, widths[index + 1] - MIN_COL))
+        next[index] = Math.round(widths[index] + dx)
+        next[index + 1] = Math.round(widths[index + 1] - dx)
+      } else {
+        // 마지막 열: 표가 에디터 폭을 넘지 않는 범위에서 조절
+        const room = drag.limit - widths.reduce((a, b) => a + b, 0)
+        next[index] = Math.round(Math.max(MIN_COL, widths[index] + Math.min(dx, Math.max(room, 0))))
+      }
+      cancelAnimationFrame(drag.raf)
+      drag.raf = requestAnimationFrame(() => {
+        const v = view()
+        if (v) setColumnWidths(v, drag.table, next)
+        updateTableBar()
+      })
+    }
+    const onDown = (e) => {
+      const hit = e.button === 0 && borderAt(e)
+      if (!hit) return
+      e.preventDefault()
+      e.stopPropagation()
+      const cells = [...hit.table.querySelector('tr').children]
+      drag = {
+        table: hit.table,
+        index: hit.index,
+        startX: e.clientX,
+        widths: cells.map((c) => Math.round(c.getBoundingClientRect().width)),
+        limit: hit.table.closest('.milkdown-table-block').getBoundingClientRect().width,
+        raf: 0,
+      }
+      root.setPointerCapture?.(e.pointerId)
+      root.classList.add('col-resize', 'resizing')
+    }
+    const onUp = () => {
+      if (!drag) return
+      drag = null
+      root.classList.remove('resizing')
+    }
+    root.addEventListener('pointermove', onMove)
+    root.addEventListener('pointerdown', onDown, true)
+    root.addEventListener('pointerup', onUp)
+    root.addEventListener('pointercancel', onUp)
+    return () => {
+      root.removeEventListener('pointermove', onMove)
+      root.removeEventListener('pointerdown', onDown, true)
+      root.removeEventListener('pointerup', onUp)
+      root.removeEventListener('pointercancel', onUp)
+    }
+  }, [updateTableBar])
+
+  // 표 안에서 열/행/표 삭제 (마지막 남은 열·행은 지워지지 않음)
+  const runTableEdit = (edit, keepCursor = true) => {
+    crepeRef.current?.editor.action((ctx) => {
+      const v = ctx.get(editorViewCtx)
+      // 지우기 전 커서가 있던 표/행/열 위치를 기억
+      const { $from } = v.state.selection
+      let d = $from.depth
+      while (d > 0 && $from.node(d).type.spec.tableRole !== 'table') d--
+      const at = d ? { tableStart: $from.start(d), row: $from.index(d), col: $from.index(d + 1) } : null
+      if (!edit(v.state, (tr) => v.dispatch(tr)) || !keepCursor || !at) return
+      // 지우고 나면 커서가 제목 행이나 표 밖으로 밀려날 수 있어서, 같은 위치(없으면 가장 가까운 행/열)의 셀로 되돌려 계속 이어서 편집할 수 있게 함
+      const table = v.state.doc.nodeAt(at.tableStart - 1)
+      if (table?.type.spec.tableRole !== 'table') return
+      const row = Math.min(at.row, table.childCount - 1)
+      let pos = at.tableStart
+      for (let i = 0; i < row; i++) pos += table.child(i).nodeSize
+      const rowNode = table.child(row)
+      pos += 1
+      for (let i = 0; i < Math.min(at.col, rowNode.childCount - 1); i++) pos += rowNode.child(i).nodeSize
+      v.dispatch(v.state.tr.setSelection(Selection.near(v.state.doc.resolve(pos + 1), 1)))
+    })
+    requestAnimationFrame(updateTableBar)
+  }
+
+  const runTableCommand = (command) => {
+    crepeRef.current?.editor.action((ctx) => ctx.get(commandsCtx).call(command.key))
+    requestAnimationFrame(updateTableBar)
+  }
 
   const notice = () => onNotice?.('유튜브 링크를 넣었어요. 발행하면 영상 플레이어로 보여요.')
 
   useEffect(() => {
+    const loaded = extractWidths(defaultValue ?? '') // 표 너비 주석은 떼어 내고 에디터에는 순수한 마크다운만 전달
     const crepe = new Crepe({
       root: rootRef.current,
-      defaultValue,
+      defaultValue: loaded.markdown,
       featureConfigs: {
         [Crepe.Feature.Placeholder]: { text: "내용을 입력하세요. '/' 를 누르면 블록 메뉴가 열려요." },
         [Crepe.Feature.BlockEdit]: {
@@ -107,13 +309,22 @@ export default function RichEditor({ defaultValue, getMarkdownRef, onError, onNo
       },
     })
     crepe.editor.config((ctx) => ctx.update(remarkPluginsCtx, (ps) => [{ plugin: fixImageTitle, options: undefined }, ...ps]))
+    crepe.editor.use(colWidthPlugins)
     let cancelled = false
     crepe.create().then(() => {
       if (cancelled) return crepe.destroy()
       crepeRef.current = crepe
+      crepe.editor.action((ctx) => applyWidths(ctx.get(editorViewCtx), loaded.widths))
     })
     // 저장 시점에 항상 최신 내용을 직접 읽어 가도록 노출 (변경 이벤트는 디바운스됨)
-    if (getMarkdownRef) getMarkdownRef.current = () => crepeRef.current?.getMarkdown() ?? defaultValue
+    if (getMarkdownRef) {
+      getMarkdownRef.current = () => {
+        const c = crepeRef.current
+        if (!c) return defaultValue
+        const widths = c.editor.action((ctx) => collectWidths(ctx.get(editorViewCtx).state.doc))
+        return injectWidths(c.getMarkdown(), widths)
+      }
+    }
     return () => {
       cancelled = true
       if (crepeRef.current === crepe) {
@@ -157,6 +368,16 @@ export default function RichEditor({ defaultValue, getMarkdownRef, onError, onNo
       className="rich-editor"
       onPasteCapture={handlePaste}
       onDropCapture={(e) => handleFiles(e, e.dataTransfer.files)}
-    />
+    >
+      {tableBar && (
+        <div className="table-bar" style={{ top: tableBar.top, left: tableBar.left, width: tableBar.width }} onMouseDown={(e) => e.preventDefault()}>
+          <button type="button" title="열 추가" onClick={() => runTableCommand(addColAfterCommand)}>＋ 열</button>
+          <button type="button" title="행 추가" onClick={() => runTableCommand(addRowAfterCommand)}>＋ 행</button>
+          <button type="button" title={tableBar.cols <= 1 ? '마지막 열은 지울 수 없어요 (표를 지우려면 표 삭제)' : '열 삭제'} disabled={tableBar.cols <= 1} onClick={() => runTableEdit(deleteColumn)}>－ 열</button>
+          <button type="button" title={tableBar.inHeader ? '맨 윗줄(제목 행)은 삭제할 수 없어요' : tableBar.rows <= 2 ? '마지막 행은 지울 수 없어요 (표를 지우려면 표 삭제)' : '행 삭제'} disabled={tableBar.inHeader || tableBar.rows <= 2} onClick={() => runTableEdit(deleteRow)}>－ 행</button>
+          <button type="button" className="danger" title="표 삭제" onClick={() => runTableEdit(deleteTable, false)}>표 삭제</button>
+        </div>
+      )}
+    </div>
   )
 }

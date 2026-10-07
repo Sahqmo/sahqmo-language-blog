@@ -187,7 +187,7 @@ nav a:hover { color: var(--text); }
   --crepe-font-default: var(--serif);
   --crepe-base-font-size: 17px;
 }
-.rich-editor { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); min-height: 520px; padding: 8px 0; }
+.rich-editor { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); min-height: 520px; padding: 8px 0; }
 /* Crepe 의 .ProseMirror 는 grid(gap 12px) 라서 min-height 를 주면 행이 늘어나 행간이 벌어짐 → 높이는 바깥 래퍼에서만 확보 */
 .rich-editor .milkdown .ProseMirror { padding: 24px 40px 48px 72px; min-height: 0; gap: 4px; align-content: start; }
 .rich-editor .milkdown .ProseMirror p { padding: 3px 0; }
@@ -394,3 +394,19 @@ body { overflow-x: clip; }
 @keyframes modal-fade { from { opacity: 0; } }
 @keyframes modal-pop { from { opacity: 0; transform: translateY(8px) scale(.97); } }
 @media (prefers-reduced-motion: reduce) { .modal-backdrop, .modal { animation: none; } }
+
+/* 표 안에 커서가 있을 때 표 아래에 뜨는 열/행 추가 버튼 */
+.table-bar { position: absolute; z-index: 5; display: flex; gap: 6px; }
+.table-bar button { cursor: pointer; border: 1px solid var(--line); background: var(--bg); color: var(--muted); border-radius: 999px; padding: 3px 12px; font-size: .8rem; box-shadow: 0 2px 8px rgba(0, 0, 0, .08); }
+.table-bar button:hover { color: var(--accent); border-color: var(--accent); }
+.table-bar { box-sizing: border-box; min-width: max-content; flex-wrap: nowrap; justify-content: flex-end; white-space: nowrap; }
+.table-bar button:disabled { opacity: .4; cursor: default; }
+.table-bar button:disabled:hover { color: var(--muted); border-color: var(--line); }
+.table-bar button.danger:hover { color: var(--danger); border-color: var(--danger); }
+
+/* 표 열 너비 조절 */
+.rich-editor.col-resize, .rich-editor.col-resize * { cursor: col-resize !important; }
+.rich-editor.resizing { user-select: none; }
+.rich-editor table:has([data-colwidth]) { width: max-content; table-layout: auto; }
+.rich-editor table [data-colwidth] { box-sizing: border-box; overflow-wrap: anywhere; }
+.table-scroll { overflow-x: auto; }
