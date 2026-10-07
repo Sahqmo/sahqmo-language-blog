@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { api, formatDate } from '../api.js'
+import { api } from '../api.js'
 import { useAuth } from '../auth.jsx'
 import PostBrowser from '../components/PostBrowser.jsx'
 import CategoryDonut, { countCategories } from '../components/CategoryDonut.jsx'
+import DateLabel from '../components/DateLabel.jsx'
 import CategoryCarousel from '../components/CategoryCarousel.jsx'
 
 // 새로고침(첫 진입) 때만 첫 화면 섹션들을 순서대로 등장시킴. 이후 SPA 내 이동에서는 생략
@@ -52,7 +53,7 @@ export default function Home() {
           <Link to={`/post/${latest.id}`} className={`panel latest ${intro ? 'enter' : ''}`} style={intro ? { '--i': 0 } : undefined}>
             <h3 className="panel-title">가장 최근 글</h3>
             <div className="card-meta">
-              <time>{formatDate(latest.date)}</time>
+              <DateLabel iso={latest.date} />
               {latest.private && <span className="lock">🔒 비공개</span>}
               {latest.category && <span className="cat">{latest.category}</span>}
             </div>

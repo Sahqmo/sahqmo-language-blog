@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { formatDate } from '../api.js'
+import DateLabel from './DateLabel.jsx'
 
 export default function PostCard({ p }) {
   const navigate = useNavigate()
@@ -12,7 +12,7 @@ export default function PostCard({ p }) {
   return (
     <Link to={`/post/${p.id}`} className="post-card">
       <div className="card-meta">
-        <time>{formatDate(p.date)}</time>
+        <DateLabel iso={p.date} />
         {p.private && <span className="lock">🔒 비공개</span>}
         {p.category && <span className="cat">{p.category}</span>}
       </div>
