@@ -3,8 +3,8 @@ import { Crepe } from '@milkdown/crepe'
 import { insert } from '@milkdown/utils'
 import { commandsCtx, editorViewCtx, remarkPluginsCtx } from '@milkdown/kit/core'
 import { clearTextInCurrentBlockCommand } from '@milkdown/kit/preset/commonmark'
-import { addColAfterCommand, addRowAfterCommand, tableCellSchema, tableHeaderSchema } from '@milkdown/kit/preset/gfm'
-import { deleteColumn, deleteRow, deleteTable } from '@milkdown/kit/prose/tables'
+import { addRowAfterCommand, tableCellSchema, tableHeaderSchema } from '@milkdown/kit/preset/gfm'
+import { addColumn, deleteColumn, deleteRow, deleteTable, isInTable, selectedRect } from '@milkdown/kit/prose/tables'
 import { Selection } from '@milkdown/kit/prose/state'
 import '@milkdown/crepe/theme/common/style.css'
 import '@milkdown/crepe/theme/frame.css'
@@ -224,7 +224,32 @@ export default function RichEditor({ defaultValue, getMarkdownRef, onError, onNo
       let d = $from.depth
       while (d > 0 && $from.node(d).type.spec.tableRole !== 'table') d--
       const at = d ? { tableStart: $from.start(d), row: $from.index(d), col: $from.index(d + 1) } : null
-      if (!edit(v.state, (tr) => v.dispatch(tr)) || !keepCursor || !at) return
+      const before = []
+      if (d) $from.node(d).firstChild?.forEach((cell) => before.push(cell.attrs.colwidth?.[0] ?? 0))
+      if (!edit(v.state, (tr) => v.dispatch(tr))) return
+      // 열을 지우면 그 열의 너비만큼 표 전체 폭이 줄어 오른쪽에 빈 공간이 생기므로, 지운 너비를 그 자리를 이어받은 열(마지막 열이면 그 앞 열)에 더해 줌
+      const shrunk = at && before.length && before.every(Boolean) ? v.state.doc.nodeAt(at.tableStart - 1) : null
+      if (shrunk?.type.spec.tableRole === 'table' && shrunk.firstChild.childCount < before.length) {
+        const widths = []
+        shrunk.firstChild.forEach((cell) => widths.push(cell.attrs.colwidth?.[0] ?? 0))
+        const deficit = before.reduce((a, b) => a + b, 0) - widths.reduce((a, b) => a + b, 0)
+        // 1열만 남으면 너비 정보를 모두 지워 처음 만든 표처럼 되돌림 (이후 열 추가는 균등 분할)
+        const reset = widths.length === 1
+        if (reset || (deficit > 0 && widths.every(Boolean))) {
+          if (!reset) widths[Math.min(at.col, widths.length - 1)] += deficit
+          const tr = v.state.tr
+          shrunk.forEach((row, rowOffset) =>
+            row.forEach((cell, cellOffset, i) => {
+              const w = reset ? null : [widths[i]]
+              if ((cell.attrs.colwidth?.[0] ?? null) !== (w?.[0] ?? null)) {
+                tr.setNodeMarkup(at.tableStart + rowOffset + 1 + cellOffset, null, { ...cell.attrs, colwidth: w })
+              }
+            }),
+          )
+          if (tr.docChanged) v.dispatch(tr.setMeta('addToHistory', false))
+        }
+      }
+      if (!keepCursor || !at) return
       // 지우고 나면 커서가 제목 행이나 표 밖으로 밀려날 수 있어서, 같은 위치(없으면 가장 가까운 행/열)의 셀로 되돌려 계속 이어서 편집할 수 있게 함
       const table = v.state.doc.nodeAt(at.tableStart - 1)
       if (table?.type.spec.tableRole !== 'table') return
@@ -239,7 +264,6 @@ export default function RichEditor({ defaultValue, getMarkdownRef, onError, onNo
     requestAnimationFrame(updateTableBar)
   }
 
-  // 열/행 추가: 새 셀에는 colwidth 가 없어서 그대로 두면 표 너비 정보가 깨지므로(저장 시 통째로 사라짐), 추가 직후 모든 행에 열 너비를 다시 채워 줌
   // 커서가 제목 행에 있을 때(표를 막 만든 직후 등)의 '－ 행': 제목 행은 지울 수 없으므로 바로 아래 본문 행을 지움
   const deleteRowBelowHeader = (state, dispatch) => {
     const { $from } = state.selection
@@ -254,6 +278,17 @@ export default function RichEditor({ defaultValue, getMarkdownRef, onError, onNo
     return deleteRow(moved, dispatch)
   }
 
+  // 열 추가는 항상 표 맨 끝에 붙임 (커서 위치와 무관)
+  const appendColumn = (state, dispatch) => {
+    if (!isInTable(state)) return false
+    if (dispatch) {
+      const rect = selectedRect(state)
+      dispatch(addColumn(state.tr, rect, rect.map.width))
+    }
+    return true
+  }
+
+  // 열/행 추가: 새 셀에는 colwidth 가 없어서 그대로 두면 표 너비 정보가 깨지므로(저장 시 통째로 사라짐), 추가 직후 모든 행에 열 너비를 다시 채워 줌
   const runTableCommand = (command) => {
     crepeRef.current?.editor.action((ctx) => {
       const v = ctx.get(editorViewCtx)
@@ -261,19 +296,21 @@ export default function RichEditor({ defaultValue, getMarkdownRef, onError, onNo
       let d = $from.depth
       while (d > 0 && $from.node(d).type.spec.tableRole !== 'table') d--
       const tableStart = d ? $from.start(d) : 0
-      const selCol = d ? $from.index(d + 1) : 0
       const before = []
       if (d) $from.node(d).firstChild?.forEach((cell) => before.push(cell.attrs.colwidth?.[0] ?? 0))
-      ctx.get(commandsCtx).call(command.key)
+      // Milkdown 의 $command 도 함수이므로 typeof 가 아니라 key 유무로 구분
+      if (command.key) ctx.get(commandsCtx).call(command.key)
+      else command(v.state, v.dispatch.bind(v))
       if (!d || !before.length || !before.every(Boolean)) return // 너비를 조절한 적 없는 표는 건드리지 않음
       const table = v.state.doc.nodeAt(tableStart - 1)
       if (table?.type.spec.tableRole !== 'table') return
       const widths = before.slice()
       if (table.firstChild.childCount === before.length + 1) {
-        // 새 열은 현재 열 너비를 반으로 나눠 가짐 (표 전체 폭 유지)
-        const half = Math.max(MIN_COL, Math.round(before[selCol] / 2))
-        widths[selCol] = Math.max(MIN_COL, before[selCol] - half)
-        widths.splice(selCol + 1, 0, half)
+        // 새 열은 마지막 열의 너비를 반으로 나눠 가짐 → 표 전체 폭은 절대 늘어나지 않음
+        const last = before.length - 1
+        const half = Math.floor(before[last] / 2)
+        widths[last] = before[last] - half
+        widths.push(half)
       } else if (table.firstChild.childCount !== before.length) return
       const tr = v.state.tr
       table.forEach((row, rowOffset) =>
@@ -416,7 +453,7 @@ export default function RichEditor({ defaultValue, getMarkdownRef, onError, onNo
     >
       {tableBar && (
         <div className="table-bar" style={{ top: tableBar.top, left: tableBar.left, width: tableBar.width }} onMouseDown={(e) => e.preventDefault()}>
-          <button type="button" title="열 추가" onClick={() => runTableCommand(addColAfterCommand)}>＋ 열</button>
+          <button type="button" title="열 추가" onClick={() => runTableCommand(appendColumn)}>＋ 열</button>
           <button type="button" title="행 추가" onClick={() => runTableCommand(addRowAfterCommand)}>＋ 행</button>
           <button type="button" title={tableBar.cols <= 1 ? '마지막 열은 지울 수 없어요 (표를 지우려면 표 삭제)' : '열 삭제'} disabled={tableBar.cols <= 1} onClick={() => runTableEdit(deleteColumn)}>－ 열</button>
           <button type="button" title={tableBar.rows <= 2 ? '마지막 행은 지울 수 없어요 (표를 지우려면 표 삭제)' : tableBar.inHeader ? '제목 행 바로 아래 행 삭제 (제목 행은 삭제할 수 없어요)' : '행 삭제'} disabled={tableBar.rows <= 2} onClick={() => runTableEdit(tableBar.inHeader ? deleteRowBelowHeader : deleteRow)}>－ 행</button>
