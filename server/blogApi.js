@@ -169,6 +169,93 @@ async function loadWithIds() {
   return { all, taken }
 }
 
+// 본문에서 쓰인 업로드 이미지 파일명들
+function imagesIn(body) {
+  const names = new Set()
+  for (const m of body.matchAll(/\/content\/images\/([^\s)"'\]]+)/g)) {
+    try {
+      names.add(decodeURIComponent(m[1]))
+    } catch {
+      names.add(m[1])
+    }
+  }
+  return names
+}
+
+// 삭제한 글에서만 쓰던 이미지 파일을 함께 지움 (다른 글이 쓰는 이미지는 남김)
+async function removeUnusedImages(deleted, remaining) {
+  const stillUsed = new Set(remaining.flatMap((p) => [...imagesIn(p.body)]))
+  for (const name of imagesIn(deleted.body)) {
+    if (stillUsed.has(name) || !validName(name) || name !== path.basename(name) || !MIME[path.extname(name).toLowerCase()]) continue
+    await fs.unlink(path.join(IMAGES, name)).catch(() => {})
+  }
+}
+
+// ---------- 안 쓰는 이미지 청소 ----------
+// 하루에 한 번(자정을 넘길 때, 그리고 그날 첫 서버 시작 시) 어떤 글에서도 쓰이지 않는 이미지를 지움.
+// 안전 원칙: 글 파일 어디에서든(비공개 글, frontmatter 포함) 파일명이 한 번이라도 보이면 절대 지우지 않음.
+//   글을 읽는 데 하나라도 실패하거나 글이 0개로 보이면(저장소 이상 가능성) 아무것도 지우지 않음.
+//   방금 올려서 아직 글에 저장 전일 수 있는 최근 파일(48시간 이내)은 건드리지 않음.
+const DATA = path.resolve(process.cwd(), 'data')
+const CLEANUP_FILE = path.join(DATA, 'cleanup.json')
+const IMAGE_GRACE_MS = 48 * 60 * 60 * 1000
+const dayKey = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+
+export function cleanupImages() {
+  return locked(async () => {
+    await fs.mkdir(POSTS, { recursive: true })
+    await fs.mkdir(IMAGES, { recursive: true })
+    const files = (await fs.readdir(POSTS)).filter((f) => f.endsWith('.md'))
+    if (!files.length) return { deleted: [], skipped: '글이 없어 건너뜀' }
+    const texts = await Promise.all(files.map((f) => fs.readFile(path.join(POSTS, f), 'utf8'))) // 하나라도 실패하면 예외 → 중단
+    const haystack = texts.join('\n')
+    const deleted = []
+    for (const name of await fs.readdir(IMAGES)) {
+      if (!validName(name) || !MIME[path.extname(name).toLowerCase()]) continue
+      if (haystack.includes(name) || haystack.includes(encodeURIComponent(name))) continue
+      const file = path.join(IMAGES, name)
+      const st = await fs.stat(file)
+      if (!st.isFile() || Date.now() - st.mtimeMs < IMAGE_GRACE_MS) continue
+      await fs.unlink(file)
+      deleted.push(name)
+    }
+    return { deleted }
+  })
+}
+
+async function cleanupIfDue() {
+  try {
+    const today = dayKey()
+    const last = JSON.parse(await fs.readFile(CLEANUP_FILE, 'utf8').catch(() => '{}')).lastRun
+    if (last === today) return
+    const { deleted, skipped } = await cleanupImages()
+    // 건너뛴 경우(글 0개 등)는 기록하지 않아 다음 기회에 다시 시도
+    if (skipped) return console.log(`[blogApi] 이미지 청소: ${skipped}`)
+    await fs.mkdir(DATA, { recursive: true })
+    await fs.writeFile(CLEANUP_FILE, JSON.stringify({ lastRun: today }))
+    if (deleted.length) console.log(`[blogApi] 안 쓰는 이미지 ${deleted.length}개 삭제`)
+  } catch (err) {
+    console.error('[blogApi] 이미지 청소 실패 (아무것도 지우지 않았을 수 있음)', err)
+  }
+}
+
+// 서버가 켜져 있는 동안 자정마다 청소 실행, 시작할 때도 오늘 분을 아직 안 돌렸으면 실행
+function scheduleCleanup() {
+  let timer
+  const arm = () => {
+    const now = new Date()
+    const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 1, 0)
+    timer = setTimeout(async () => {
+      await cleanupIfDue()
+      arm()
+    }, nextMidnight - now)
+    timer.unref?.()
+  }
+  cleanupIfDue()
+  arm()
+  return () => clearTimeout(timer)
+}
+
 // ---------- 이미지 파일명 ----------
 // 업로드 이미지는 `YYYYMMDD-HHmmss-xxxx.확장자` 형식으로 저장 (원본 파일명은 보관하지 않음)
 const IMAGE_NAME = /^\d{8}-\d{6}-[0-9a-f]{4}\.[a-z0-9]+$/
@@ -303,9 +390,11 @@ async function handle(req, res, url) {
 
     if (ref && req.method === 'DELETE') {
       const ok = await locked(async () => {
-        const old = findPost((await loadWithIds()).all, ref)
+        const { all } = await loadWithIds()
+        const old = findPost(all, ref)
         if (!old) return false
         await fs.unlink(path.join(POSTS, `${old.slug}.md`))
+        await removeUnusedImages(old, all.filter((p) => p !== old))
         return true
       })
       return ok ? send(res, 200, { ok: true }) : send(res, 404, { error: 'Not found' })
@@ -360,9 +449,13 @@ export default function blogApi() {
     name: 'blog-api',
     configureServer(server) {
       server.middlewares.use(middleware)
+      const stop = scheduleCleanup()
+      server.httpServer?.once('close', stop)
     },
     configurePreviewServer(server) {
       server.middlewares.use(middleware)
+      const stop = scheduleCleanup()
+      server.httpServer?.once('close', stop)
     },
   }
 }
