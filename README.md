@@ -8,10 +8,10 @@ npm run dev     # http://localhost:5173
 ```
 
 ## 저장 위치
-- `content/posts/<slug>.md` — 글 (상단 frontmatter: title, date, updated, tags + 마크다운 본문)
-- `content/images/` — 에디터에 붙여넣기/드래그한 이미지
+- `content/posts/<글 코드>.md` — 글. 파일명은 무작위 16진수 5자리 글 코드(예: `a3f9c.md`)이고 주소도 `/post/a3f9c` (상단 frontmatter: id, title, date, updated, category, tags, private + 마크다운 본문)
+- `content/images/` — 에디터에 붙여넣기/드래그한 이미지. 파일명은 `YYYYMMDD-HHmmss-xxxx.확장자` (원본 파일명은 저장하지 않음)
 
-저장 API는 `server/blogApi.js`(Vite 미들웨어)가 담당하므로 `npm run dev`(또는 `npm run build && npm run preview`)로 실행해야 글 저장이 동작합니다. 로컬 전용이며 인증은 없습니다.
+저장 API는 `server/blogApi.js`(Vite 미들웨어)가 담당하므로 `npm run dev`(또는 `npm run build && npm run preview`)로 실행해야 글 저장이 동작합니다. 
 
 ## 실행 / 로그인
 - `start-server.bat` 더블클릭 → 의존성 설치(최초 1회) 후 개발 서버 실행, 브라우저 자동 열림. 코드를 수정하면 자동 반영됩니다(서버 코드 수정 시 서버 자동 재시작 + 페이지 새로고침).

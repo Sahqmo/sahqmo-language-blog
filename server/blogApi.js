@@ -50,16 +50,6 @@ function serializeFile(meta, body) {
 }
 
 // ---------- helpers ----------
-function slugify(title) {
-  const s = title
-    .trim()
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60)
-  return s || `post-${Date.now()}`
-}
-
 function validName(name) {
   return typeof name === 'string' && name.length > 0 && !/[\\/:*?"<>|]/.test(name) && !name.startsWith('.')
 }
@@ -167,7 +157,58 @@ async function loadWithIds() {
     p.meta = { ...p.meta, id }
     await fs.writeFile(path.join(POSTS, `${p.slug}.md`), serializeFile({ id, ...p.meta }, p.body))
   }
+  for (const p of all) {
+    // 파일명은 글 코드로 통일 (예전 제목 기반 이름은 바꿔 줌)
+    if (p.slug === p.meta.id) continue
+    const target = path.join(POSTS, `${p.meta.id}.md`)
+    if (await exists(target)) continue
+    await fs.rename(path.join(POSTS, `${p.slug}.md`), target)
+    p.slug = p.meta.id
+  }
+  await migrateImages(all)
   return { all, taken }
+}
+
+// ---------- 이미지 파일명 ----------
+// 업로드 이미지는 `YYYYMMDD-HHmmss-xxxx.확장자` 형식으로 저장 (원본 파일명은 보관하지 않음)
+const IMAGE_NAME = /^\d{8}-\d{6}-[0-9a-f]{4}\.[a-z0-9]+$/
+const pad = (n) => String(n).padStart(2, '0')
+
+async function newImageName(date, ext) {
+  const stamp = `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
+  let name
+  do name = `${stamp}-${crypto.randomBytes(2).toString('hex')}${ext}`
+  while (await exists(path.join(IMAGES, name)))
+  return name
+}
+
+// 예전 형식 이미지의 이름을 새 형식으로 바꾸고, 글 본문의 이미지 주소도 함께 고침 (프로세스당 한 번)
+let imagesMigrated = false
+async function migrateImages(all) {
+  if (imagesMigrated) return
+  imagesMigrated = true
+  const renames = []
+  for (const f of await fs.readdir(IMAGES)) {
+    const ext = path.extname(f).toLowerCase()
+    if (f.startsWith('.') || !MIME[ext] || IMAGE_NAME.test(f)) continue
+    const epoch = Number(f.match(/^(\d{13})-/)?.[1])
+    const date = epoch ? new Date(epoch) : (await fs.stat(path.join(IMAGES, f))).mtime
+    const name = await newImageName(date, ext)
+    await fs.rename(path.join(IMAGES, f), path.join(IMAGES, name))
+    renames.push([f, name])
+  }
+  if (!renames.length) return
+  for (const p of all) {
+    let body = p.body
+    for (const [from, to] of renames) {
+      for (const old of new Set([from, encodeURIComponent(from)])) {
+        body = body.split(`/content/images/${old}`).join(`/content/images/${to}`)
+      }
+    }
+    if (body === p.body) continue
+    p.body = body
+    await fs.writeFile(path.join(POSTS, `${p.slug}.md`), serializeFile(p.meta, body))
+  }
 }
 
 // 주소의 식별자: id 코드, 아니면 (예전 주소) 파일명 slug
@@ -208,11 +249,10 @@ async function handle(req, res, url) {
       if (!title.trim()) return send(res, 400, { error: '제목을 입력해 주세요.' })
       const created = await locked(async () => {
         const { taken } = await loadWithIds()
-        const base = slugify(title)
-        let s = base
-        for (let n = 2; await exists(path.join(POSTS, `${s}.md`)); n++) s = `${base}-${n}`
+        const id = newId(taken)
+        const s = id
         const meta = {
-          id: newId(taken),
+          id,
           title: title.trim(),
           date: new Date().toISOString(),
           category: String(category).trim(),
@@ -276,8 +316,7 @@ async function handle(req, res, url) {
     const orig = path.basename(url.searchParams.get('name') || 'file')
     const ext = path.extname(orig).toLowerCase()
     if (!MIME[ext]) return send(res, 400, { error: '지원하지 않는 파일 형식입니다.' })
-    const safe = path.basename(orig, ext).replace(/[^\p{L}\p{N}_-]+/gu, '-').slice(0, 50) || 'image'
-    const filename = `${Date.now()}-${safe}${ext}`
+    const filename = await newImageName(new Date(), ext)
     await fs.writeFile(path.join(IMAGES, filename), await readBody(req))
     return send(res, 201, { url: `/content/images/${encodeURIComponent(filename)}`, name: orig })
   }

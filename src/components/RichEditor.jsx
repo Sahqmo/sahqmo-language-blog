@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { Crepe } from '@milkdown/crepe'
 import { insert } from '@milkdown/utils'
-import { commandsCtx } from '@milkdown/kit/core'
+import { commandsCtx, remarkPluginsCtx } from '@milkdown/kit/core'
 import { clearTextInCurrentBlockCommand } from '@milkdown/kit/preset/commonmark'
 import '@milkdown/crepe/theme/common/style.css'
 import '@milkdown/crepe/theme/frame.css'
@@ -11,6 +11,17 @@ import { isYouTubeUrl, parseYouTube } from '../youtube.js'
 async function uploadImage(file) {
   const { url } = await api.upload(file)
   return url
+}
+
+// 캡션 없는 이미지(`![1.00](주소)`)는 title 이 null 로 파싱되어, 이미지 블록의 caption(문자열 필수) 검증에 걸려
+// 글을 다시 열면 블록이 통째로 사라짐. 파싱 직후 title 을 빈 문자열로 맞춰 줌.
+// 이미지 블록 변환보다 먼저 실행되어야 해서, 다른 플러그인이 등록되기 전에 설정 단계에서 맨 앞에 끼워 넣음
+const fixImageTitle = () => (tree) => {
+  const walk = (node) => {
+    if (node.type === 'image' && node.title == null) node.title = ''
+    node.children?.forEach(walk)
+  }
+  walk(tree)
 }
 
 const YOUTUBE_ICON =
@@ -95,6 +106,7 @@ export default function RichEditor({ defaultValue, getMarkdownRef, onError, onNo
         [Crepe.Feature.LinkTooltip]: { inputPlaceholder: '링크 주소 붙여넣기…' },
       },
     })
+    crepe.editor.config((ctx) => ctx.update(remarkPluginsCtx, (ps) => [{ plugin: fixImageTitle, options: undefined }, ...ps]))
     let cancelled = false
     crepe.create().then(() => {
       if (cancelled) return crepe.destroy()
