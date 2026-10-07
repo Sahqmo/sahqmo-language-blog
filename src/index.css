@@ -243,7 +243,6 @@ nav a:hover { color: var(--text); }
 .legend b { color: var(--muted); font-weight: 400; }
 
 .block { margin-bottom: 40px; }
-.cat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .cat-panel { padding: 18px 20px; }
 .cat-head { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: none; cursor: pointer; padding: 0 0 8px; text-align: left; }
 .cat-head span { margin-left: auto; color: var(--muted); font-size: .85rem; }
@@ -271,7 +270,7 @@ a.cat.clickable:hover { filter: brightness(1.12); }
 @media (prefers-reduced-motion: reduce) { .cat-pop { animation: none; } }
 
 @media (max-width: 720px) {
-  .top-grid, .cat-grid { grid-template-columns: 1fr; }
+  .top-grid { grid-template-columns: 1fr; }
 }
 
 /* 상단 두 영역은 카드 없이 */
@@ -324,6 +323,27 @@ a.cat.clickable:hover { filter: brightness(1.12); }
 .cat-panel li a:hover { color: var(--accent); }
 .cat-panel li a:hover::after { opacity: 1; transform: translateX(3px); }
 
+/* 많이 쓴 카테고리 슬라이드: 노트 한 장이 가운데에 보이고 옆으로 넘어감 (모든 장이 같은 칸에 겹쳐 놓여 높이는 가장 큰 장에 맞춰짐) */
+/* 본문 너비(.shell)와 무관하게 창 전체 너비로 펼치고, 양끝은 투명하게 사라지게 해서 잘리거나 창 끝에 붙어 보이지 않게 함 */
+.cat-viewport {
+  display: grid; overflow: hidden; padding: 4px 0 16px;
+  width: 100vw; margin-left: calc(50% - 50vw);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 14%, #000 86%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 14%, #000 86%, transparent);
+}
+.cat-slide { grid-area: 1 / 1; justify-self: center; width: min(calc(100% - 72px), 460px); transition: transform .6s cubic-bezier(.2, .7, .2, 1), opacity .6s ease; }
+.cat-slide.no-anim { transition: none; }
+.cat-slide.side { cursor: pointer; }
+.cat-slide.side:hover { opacity: .6 !important; }
+.cat-controls { display: flex; align-items: center; justify-content: center; gap: 14px; }
+.cat-dots { display: flex; align-items: center; gap: 8px; }
+.cat-dots button { width: 8px; height: 8px; padding: 0; border: none; border-radius: 999px; background: var(--line); cursor: pointer; transition: width .25s, background .2s; }
+.cat-dots button:hover { background: var(--muted); }
+.cat-dots button.on { width: 22px; background: var(--accent); }
+.cat-arrow { width: 28px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: transparent; color: var(--muted); font-size: 1.1rem; line-height: 1; cursor: pointer; transition: color .15s, border-color .15s; }
+.cat-arrow:hover { color: var(--accent); border-color: var(--accent); }
+@media (prefers-reduced-motion: reduce) { .cat-slide { transition: none; } }
+
 /* 태그 링크 */
 a.tag, .tag.clickable { text-decoration: none; cursor: pointer; transition: background .15s, color .15s; }
 a.tag:hover, .tag.clickable:hover { background: var(--accent); color: var(--bg); }
@@ -364,7 +384,8 @@ body { overflow-x: clip; }
   min-height: calc(100svh - var(--header-h)); display: flex; flex-direction: column; justify-content: center;
   position: relative; padding-bottom: 100px;
 }
-.hero-screen .top-grid { margin: 0 0 48px; }
+.hero-screen .top-grid { --wide: min(986px, calc(100vw - 48px)); width: var(--wide); margin: 0 0 80px calc(50% - var(--wide) / 2); } /* 본문(900px)보다 넓게, 글 목록 폭은 그대로 */
+.cat-title { text-align: center; }
 .hero-screen .block { margin-bottom: 0; }
 .scroll-hint {
   position: absolute; left: 50%; bottom: 30px; transform: translateX(-50%);

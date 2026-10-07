@@ -3,7 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { api, formatDate } from '../api.js'
 import { useAuth } from '../auth.jsx'
 import PostBrowser from '../components/PostBrowser.jsx'
-import CategoryDonut, { UNCATEGORIZED, countCategories } from '../components/CategoryDonut.jsx'
+import CategoryDonut, { countCategories } from '../components/CategoryDonut.jsx'
+import CategoryCarousel from '../components/CategoryCarousel.jsx'
 
 // 새로고침(첫 진입) 때만 첫 화면 섹션들을 순서대로 등장시킴. 이후 SPA 내 이동에서는 생략
 let heroPlayed = false
@@ -40,8 +41,7 @@ export default function Home() {
 
   const latest = posts[0]
   const hasPosts = posts.length > 0
-  // 글이 없어도 형식은 채워 두기 위해 빈 카테고리 노트 3장을 보여 줌
-  const topCats = hasPosts ? cats.slice(0, 3) : [null, null, null]
+  const topCats = cats.slice(0, 5)
   const setCategory = (c) => setParams(c ? { category: c } : {})
 
   return (
@@ -75,37 +75,24 @@ export default function Home() {
       </section>
 
       <section className="block">
-        <h3 className={`section-title ${intro ? 'enter' : ''}`} style={intro ? { '--i': 2 } : undefined}>많이 쓴 카테고리</h3>
-        <div className="cat-grid">
-          {topCats.map((c, i) => (
-            <div key={c ? c.name : `empty-${i}`} className={`panel cat-panel ${c ? '' : 'is-empty'} ${intro ? 'enter' : ''}`} style={intro ? { '--i': 3 + i } : undefined}>
-              {c ? (
-                <button className="cat-head" onClick={() => setCategory(c.name)}>
-                  <i style={{ background: c.color }} />
-                  <strong>{c.name}</strong>
-                  <span>{c.count}편</span>
-                </button>
-              ) : (
+        <h3 className={`section-title cat-title ${intro ? 'enter' : ''}`} style={intro ? { '--i': 2 } : undefined}>많이 쓴 카테고리</h3>
+        {hasPosts ? (
+          <CategoryCarousel cats={topCats} posts={posts} onSelect={setCategory} intro={intro} />
+        ) : (
+          // 글이 없어도 형식은 채워 두기 위해 빈 카테고리 노트 한 장을 보여 줌
+          <div className="cat-viewport">
+            <div className="cat-slide">
+              <div className={`panel cat-panel is-empty ${intro ? 'enter' : ''}`} style={intro ? { '--i': 3 } : undefined}>
                 <div className="cat-head">
                   <i />
                   <strong>카테고리</strong>
                   <span>0편</span>
                 </div>
-              )}
-              <ul>
-                {c &&
-                  posts
-                    .filter((p) => (p.category || UNCATEGORIZED) === c.name)
-                    .slice(0, 5)
-                    .map((p) => (
-                      <li key={p.id}>
-                        <Link to={`/post/${p.id}`}><span>{p.title}</span></Link>
-                      </li>
-                    ))}
-              </ul>
+                <ul />
+              </div>
             </div>
-          ))}
-        </div>
+          </div>
+        )}
       </section>
 
       <a href="#recent" className={`scroll-hint ${intro ? 'enter-fade' : ''}`} aria-label="아래로 스크롤" style={intro ? { '--i': 6 } : undefined} onClick={(e) => { e.preventDefault(); listRef.current?.scrollIntoView({ behavior: 'smooth' }) }}>
