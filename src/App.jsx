@@ -2,13 +2,13 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link, NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import { RequireAuth, useAuth } from './auth.jsx'
 import Home from './pages/Home.jsx'
-import PostPage from './pages/PostPage.jsx'
 import Login from './pages/Login.jsx'
 import TagPage from './pages/TagPage.jsx'
 import PostList from './pages/PostList.jsx'
 
-// 에디터(Milkdown)는 용량이 커서 글을 쓸 때만 불러옴
+// 에디터(Milkdown)와 글 보기(마크다운 렌더링)는 용량이 커서 필요할 때만 불러옴
 const Editor = lazy(() => import('./pages/Editor.jsx'))
+const PostPage = lazy(() => import('./pages/PostPage.jsx'))
 
 // 마크다운 에디터가 시스템 다크/라이트 설정을 따르도록 동기화
 function useColorMode() {

@@ -61,23 +61,47 @@ function borderAt(e) {
   return null
 }
 
+// ---------- 표 공통 도우미 ----------
+// 선택 위치가 속한 표의 깊이 (표 밖이면 0)
+function tableDepth($pos) {
+  let d = $pos.depth
+  while (d > 0 && $pos.node(d).type.spec.tableRole !== 'table') d--
+  return d
+}
+
+// 표 첫 행의 열 너비(px) 목록 (너비가 없는 열은 0)
+function firstRowWidths(table) {
+  const out = []
+  table.firstChild?.forEach((cell) => out.push(cell.attrs.colwidth?.[0] ?? 0))
+  return out
+}
+
+// 표의 모든 셀에 열 너비를 기록 (widths 가 null 이면 모두 지움). 값이 달라지는 셀만 바꿈. tableStart 는 표 안쪽 시작 위치
+function writeWidths(tr, table, tableStart, widths) {
+  table.forEach((row, rowOffset) =>
+    row.forEach((cell, cellOffset, i) => {
+      const w = widths?.[i] || null
+      if ((cell.attrs.colwidth?.[0] ?? null) !== w) {
+        tr.setNodeMarkup(tableStart + rowOffset + 1 + cellOffset, null, { ...cell.attrs, colwidth: w && [w] })
+      }
+    }),
+  )
+}
+
+// 너비 보정은 사용자가 한 편집이 아니므로 되돌리기 기록에 남기지 않음
+function commitQuietly(view, tr) {
+  if (tr.docChanged) view.dispatch(tr.setMeta('addToHistory', false))
+}
+
 // 표의 모든 행에서 열 너비(px)를 문서에 기록
 function setColumnWidths(view, tableEl, widths) {
   const first = tableEl.querySelector('td, th')
   if (!first) return
   const $pos = view.state.doc.resolve(view.posAtDOM(first, 0))
-  let d = $pos.depth
-  while (d > 0 && $pos.node(d).type.spec.tableRole !== 'table') d--
+  const d = tableDepth($pos)
   if (!d) return
-  const start = $pos.start(d)
   const tr = view.state.tr
-  $pos.node(d).forEach((row, rowOffset) => {
-    row.forEach((cell, cellOffset, i) => {
-      if (widths[i] && cell.attrs.colwidth?.[0] !== widths[i]) {
-        tr.setNodeMarkup(start + rowOffset + 1 + cellOffset, null, { ...cell.attrs, colwidth: [widths[i]] })
-      }
-    })
-  })
+  writeWidths(tr, $pos.node(d), $pos.start(d), widths)
   if (tr.docChanged) view.dispatch(tr)
 }
 
@@ -86,8 +110,7 @@ function collectWidths(doc) {
   const out = []
   doc.descendants((node) => {
     if (node.type.spec.tableRole !== 'table') return
-    const widths = []
-    node.firstChild?.forEach((cell) => widths.push(cell.attrs.colwidth?.[0] ?? 0))
+    const widths = firstRowWidths(node)
     out.push(widths.length && widths.every(Boolean) ? widths : null)
     return false
   })
@@ -101,16 +124,10 @@ function applyWidths(view, widths) {
   view.state.doc.descendants((node, pos) => {
     if (node.type.spec.tableRole !== 'table') return
     const w = widths[k++]
-    if (w && node.firstChild?.childCount === w.length) {
-      node.forEach((row, rowOffset) =>
-        row.forEach((cell, cellOffset, i) =>
-          tr.setNodeMarkup(pos + 1 + rowOffset + 1 + cellOffset, null, { ...cell.attrs, colwidth: [w[i]] }),
-        ),
-      )
-    }
+    if (w && node.firstChild?.childCount === w.length) writeWidths(tr, node, pos + 1, w)
     return false
   })
-  if (tr.docChanged) view.dispatch(tr.setMeta('addToHistory', false))
+  commitQuietly(view, tr)
 }
 
 const YOUTUBE_ICON =
@@ -221,32 +238,22 @@ export default function RichEditor({ defaultValue, getMarkdownRef, onError, onNo
       const v = ctx.get(editorViewCtx)
       // 지우기 전 커서가 있던 표/행/열 위치를 기억
       const { $from } = v.state.selection
-      let d = $from.depth
-      while (d > 0 && $from.node(d).type.spec.tableRole !== 'table') d--
+      const d = tableDepth($from)
       const at = d ? { tableStart: $from.start(d), row: $from.index(d), col: $from.index(d + 1) } : null
-      const before = []
-      if (d) $from.node(d).firstChild?.forEach((cell) => before.push(cell.attrs.colwidth?.[0] ?? 0))
+      const before = d ? firstRowWidths($from.node(d)) : []
       if (!edit(v.state, (tr) => v.dispatch(tr))) return
       // 열을 지우면 그 열의 너비만큼 표 전체 폭이 줄어 오른쪽에 빈 공간이 생기므로, 지운 너비를 그 자리를 이어받은 열(마지막 열이면 그 앞 열)에 더해 줌
       const shrunk = at && before.length && before.every(Boolean) ? v.state.doc.nodeAt(at.tableStart - 1) : null
       if (shrunk?.type.spec.tableRole === 'table' && shrunk.firstChild.childCount < before.length) {
-        const widths = []
-        shrunk.firstChild.forEach((cell) => widths.push(cell.attrs.colwidth?.[0] ?? 0))
+        const widths = firstRowWidths(shrunk)
         const deficit = before.reduce((a, b) => a + b, 0) - widths.reduce((a, b) => a + b, 0)
         // 1열만 남으면 너비 정보를 모두 지워 처음 만든 표처럼 되돌림 (이후 열 추가는 균등 분할)
         const reset = widths.length === 1
         if (reset || (deficit > 0 && widths.every(Boolean))) {
           if (!reset) widths[Math.min(at.col, widths.length - 1)] += deficit
           const tr = v.state.tr
-          shrunk.forEach((row, rowOffset) =>
-            row.forEach((cell, cellOffset, i) => {
-              const w = reset ? null : [widths[i]]
-              if ((cell.attrs.colwidth?.[0] ?? null) !== (w?.[0] ?? null)) {
-                tr.setNodeMarkup(at.tableStart + rowOffset + 1 + cellOffset, null, { ...cell.attrs, colwidth: w })
-              }
-            }),
-          )
-          if (tr.docChanged) v.dispatch(tr.setMeta('addToHistory', false))
+          writeWidths(tr, shrunk, at.tableStart, reset ? null : widths)
+          commitQuietly(v, tr)
         }
       }
       if (!keepCursor || !at) return
@@ -267,8 +274,7 @@ export default function RichEditor({ defaultValue, getMarkdownRef, onError, onNo
   // 커서가 제목 행에 있을 때(표를 막 만든 직후 등)의 '－ 행': 제목 행은 지울 수 없으므로 바로 아래 본문 행을 지움
   const deleteRowBelowHeader = (state, dispatch) => {
     const { $from } = state.selection
-    let d = $from.depth
-    while (d > 0 && $from.node(d).type.spec.tableRole !== 'table') d--
+    const d = tableDepth($from)
     if (!d) return false
     const table = $from.node(d)
     if (table.childCount < 3) return false
@@ -293,11 +299,9 @@ export default function RichEditor({ defaultValue, getMarkdownRef, onError, onNo
     crepeRef.current?.editor.action((ctx) => {
       const v = ctx.get(editorViewCtx)
       const { $from } = v.state.selection
-      let d = $from.depth
-      while (d > 0 && $from.node(d).type.spec.tableRole !== 'table') d--
+      const d = tableDepth($from)
       const tableStart = d ? $from.start(d) : 0
-      const before = []
-      if (d) $from.node(d).firstChild?.forEach((cell) => before.push(cell.attrs.colwidth?.[0] ?? 0))
+      const before = d ? firstRowWidths($from.node(d)) : []
       // Milkdown 의 $command 도 함수이므로 typeof 가 아니라 key 유무로 구분
       if (command.key) ctx.get(commandsCtx).call(command.key)
       else command(v.state, v.dispatch.bind(v))
@@ -313,14 +317,8 @@ export default function RichEditor({ defaultValue, getMarkdownRef, onError, onNo
         widths.push(half)
       } else if (table.firstChild.childCount !== before.length) return
       const tr = v.state.tr
-      table.forEach((row, rowOffset) =>
-        row.forEach((cell, cellOffset, i) => {
-          if (cell.attrs.colwidth?.[0] !== widths[i]) {
-            tr.setNodeMarkup(tableStart + rowOffset + 1 + cellOffset, null, { ...cell.attrs, colwidth: [widths[i]] })
-          }
-        }),
-      )
-      if (tr.docChanged) v.dispatch(tr.setMeta('addToHistory', false))
+      writeWidths(tr, table, tableStart, widths)
+      commitQuietly(v, tr)
     })
     requestAnimationFrame(updateTableBar)
   }
