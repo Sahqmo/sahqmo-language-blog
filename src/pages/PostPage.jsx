@@ -56,7 +56,11 @@ export default function PostPage() {
         <h1>{post.title}</h1>
         <div className="meta">
           {post.private && <span className="lock">🔒 비공개</span>}
-          {post.category && <span className="cat">{post.category}</span>}
+          {post.category && (
+            <Link to={`/posts?category=${encodeURIComponent(post.category)}`} className="cat clickable" title={`${post.category} 글 모아보기`}>
+              {post.category}
+            </Link>
+          )}
           <time>{formatDateTime(post.date)}</time>
           {post.updated && <span>· {formatDateTime(post.updated)} 수정</span>}
           {loggedIn && (
