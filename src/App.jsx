@@ -22,6 +22,27 @@ const NavIcon = ({ name }) => (
   </svg>
 )
 
+// 이스터에그: 코나미 커맨드(↑↑↓↓←→←→BA)를 입력하면 하단 문구가 바뀜. 저장하지 않아서 새로고침하면 원래대로 돌아감
+const KONAMI = ['arrowup', 'arrowup', 'arrowdown', 'arrowdown', 'arrowleft', 'arrowright', 'arrowleft', 'arrowright', 'b', 'a']
+function useKonami() {
+  const [on, setOn] = useState(false)
+  useEffect(() => {
+    let i = 0
+    const onKey = (e) => {
+      const key = e.key.toLowerCase()
+      // 틀리면 처음부터 다시 (틀린 키가 ↑ 이면 새 시작으로 침)
+      i = key === KONAMI[i] ? i + 1 : key === KONAMI[0] ? 1 : 0
+      if (i === KONAMI.length) {
+        i = 0
+        setOn(true)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+  return on
+}
+
 // 마크다운 에디터가 시스템 다크/라이트 설정을 따르도록 동기화
 function useColorMode() {
   useEffect(() => {
@@ -47,6 +68,7 @@ function useScrolled() {
 
 export default function App() {
   useColorMode()
+  const egg = useKonami()
   const scrolled = useScrolled()
   const { ready, loggedIn, logout } = useAuth()
   const onHome = useLocation().pathname === '/'
@@ -111,7 +133,7 @@ export default function App() {
         </Routes>
         </Suspense>
       </main>
-      <footer className="site-footer">조용히 쌓아 가는 언어의 기록</footer>
+      <footer className="site-footer">{egg ? 'Kojvog sannehen elšejive vi tone' : '조용히 쌓아 가는 언어의 기록'}</footer>
     </div>
   )
 }

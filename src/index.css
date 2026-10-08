@@ -130,6 +130,9 @@ nav a:hover { color: var(--text); }
 .prose p { margin: 0; padding: 0; line-height: 2.09; }
 .prose > p + p { margin-top: 0; }
 .prose ul, .prose ol { margin: 0; }
+/* 책 양식: 본문 문단은 첫 줄 들여쓰기 (제목 바로 다음 문단, 이미지만 있는 문단, 인용·목록·표 안의 문단은 제외) */
+.prose > p { text-indent: 1em; }
+.prose > :is(h1, h2, h3, h4, h5, h6) + p, .prose > p:has(> img:only-child) { text-indent: 0; }
 .prose blockquote > * + * { margin-top: 4px; }
 .prose > blockquote { margin: 11px 0 8px; }
 .prose ul, .prose ol { padding-left: 1.5em; }
@@ -409,7 +412,7 @@ a.tag:hover, .tag.clickable:hover { background: var(--accent); color: var(--bg);
 .rich-editor .milkdown .ProseMirror h4,
 .rich-editor .milkdown .ProseMirror h5,
 .rich-editor .milkdown .ProseMirror h6 { font-size: 1.05rem; line-height: 1.5; font-weight: 700; margin-top: var(--h4-gap); }
-.rich-editor .milkdown .ProseMirror > :is(h1, h2, h3, h4, h5, h6):first-child { margin-top: 0; }
+/* 에디터는 첫 줄 제목의 위 여백을 :first-child 로 없애지 않음: 드래그/선택 중 ProseMirror 가 맨 앞에 요소를 넣었다 빼면서 첫 줄 여백이 들쭉날쭉해짐 */
 
 /* 블록 핸들(+ / 드래그 아이콘)을 에디터 박스 바깥 왼쪽 여백으로 빼냄. 좁은 화면에서는 안쪽 여백을 써서 잘리지 않게 함 */
 @media (min-width: 960px) {

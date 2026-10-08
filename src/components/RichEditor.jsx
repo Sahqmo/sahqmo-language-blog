@@ -6,6 +6,9 @@ import { clearTextInCurrentBlockCommand } from '@milkdown/kit/preset/commonmark'
 import { addRowAfterCommand, tableCellSchema, tableHeaderSchema } from '@milkdown/kit/preset/gfm'
 import { addColumn, deleteColumn, deleteRow, deleteTable, isInTable, selectedRect } from '@milkdown/kit/prose/tables'
 import { Selection } from '@milkdown/kit/prose/state'
+import { InputRule, inputRules } from '@milkdown/kit/prose/inputrules'
+import { $prose } from '@milkdown/kit/utils'
+import { DIGRAPH_END, digraphReplacement } from '../digraphs.js'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { languages } from '@codemirror/language-data'
 import { tags as t } from '@lezer/highlight'
@@ -13,6 +16,7 @@ import '@milkdown/crepe/theme/common/style.css'
 import '@milkdown/crepe/theme/frame.css'
 import { api } from '../api.js'
 import { isYouTubeUrl, parseYouTube } from '../youtube.js'
+import remarkStrongFix from '../remarkStrongFix.js'
 import { extractWidths, injectWidths } from '../tableWidths.js'
 
 async function uploadImage(file) {
@@ -61,6 +65,22 @@ const codeHighlight = syntaxHighlighting(
     { tag: [t.meta, t.processingInstruction, t.punctuation, t.operator], color: 'var(--tok-punct)' },
   ]),
 )
+
+// 특수문자 입력 장치: 켜져 있으면 두 글자(kh, th, ch …)를 치는 즉시 특수문자로 바꿈. 바로 Backspace 를 누르면 친 글자로 되돌아감.
+// 영어 글(the, ship …)이 망가지지 않게 꺼 둘 수 있어서, 켜짐 여부는 ref 로 매번 읽음. 인라인 코드 안에서는 바꾸지 않음.
+const digraphPlugin = (enabledRef) =>
+  $prose(() =>
+    inputRules({
+      rules: [
+        new InputRule(DIGRAPH_END, (state, match, start, end) => {
+          if (!enabledRef?.current) return null
+          if (state.doc.resolve(start).marks().some((m) => m.type.spec.code || m.type.name === 'inlineCode')) return null
+          const rep = digraphReplacement(match[0])
+          return rep ? state.tr.insertText(rep, start, end) : null
+        }),
+      ],
+    }),
+  )
 
 const MIN_COL = 60
 const GRAB = 5 // 셀 오른쪽 테두리에서 이 픽셀 안쪽이면 너비 조절 영역
@@ -161,7 +181,7 @@ const youtubeMarkdown = (url) => {
 //   - 마크다운 단축 입력: "# ", "- ", "> ", "```", **굵게** 등
 //   - "/" 로 블록 메뉴, 블록 왼쪽 핸들로 이동/추가
 // defaultValue 는 최초 마운트 시에만 사용합니다. 값이 바뀌면 key 로 다시 마운트하세요.
-export default function RichEditor({ defaultValue, getMarkdownRef, onError, onNotice }) {
+export default function RichEditor({ defaultValue, getMarkdownRef, onError, onNotice, digraphRef }) {
   const rootRef = useRef(null)
   const crepeRef = useRef(null)
   const [tableBar, setTableBar] = useState(null) // 커서가 표 안에 있을 때 표 아래에 띄우는 열/행 추가 버튼 위치
@@ -415,8 +435,9 @@ export default function RichEditor({ defaultValue, getMarkdownRef, onError, onNo
         [Crepe.Feature.LinkTooltip]: { inputPlaceholder: '링크 주소 붙여넣기…' },
       },
     })
-    crepe.editor.config((ctx) => ctx.update(remarkPluginsCtx, (ps) => [{ plugin: fixImageTitle, options: undefined }, ...ps]))
+    crepe.editor.config((ctx) => ctx.update(remarkPluginsCtx, (ps) => [{ plugin: fixImageTitle, options: undefined }, { plugin: remarkStrongFix, options: undefined }, ...ps]))
     crepe.editor.use(colWidthPlugins)
+    crepe.editor.use(digraphPlugin(digraphRef))
     let cancelled = false
     crepe.create().then(() => {
       if (cancelled) return crepe.destroy()
