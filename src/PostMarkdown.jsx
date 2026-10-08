@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import remarkBreaks from 'remark-breaks'
 import remarkBr from './remarkBr.js'
+import remarkStrongFix from './remarkStrongFix.js'
 import remarkTableCols from './remarkTableCols.js'
 import { embedUrl, parseYouTube } from './youtube.js'
 
@@ -95,7 +96,7 @@ function CodeBlock({ node, children, ...props }) {
   )
 }
 const mdComponents = { p: Paragraph, table: Table, pre: CodeBlock }
-const remarkPlugins = [remarkGfm, remarkBreaks, remarkBr, remarkTableCols]
+const remarkPlugins = [remarkGfm, remarkBreaks, remarkBr, remarkStrongFix, remarkTableCols]
 // 언어를 적은 코드 블록만 색을 입힘 (언어 자동 추측은 끔)
 const rehypePlugins = [[rehypeHighlight, { detect: false, ignoreMissing: true }]]
 
