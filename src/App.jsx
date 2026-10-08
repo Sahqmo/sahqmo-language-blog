@@ -133,7 +133,7 @@ export default function App() {
         </Routes>
         </Suspense>
       </main>
-      <footer className="site-footer">{egg ? 'Kojvog sannehen elšejive vi tone' : '조용히 쌓아 가는 언어의 기록'}</footer>
+      <footer className="site-footer">{egg ? 'Kojvog sannehent elšejive vi tone' : '조용히 쌓아 가는 언어의 기록'}</footer>
     </div>
   )
 }

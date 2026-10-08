@@ -386,7 +386,6 @@ a.cat.clickable:hover { filter: brightness(1.12); }
   mask-image: linear-gradient(to right, transparent, #000 14%, #000 86%, transparent);
 }
 .cat-slide { grid-area: 1 / 1; justify-self: center; width: min(calc(100% - 72px), 460px); transition: transform .6s cubic-bezier(.2, .7, .2, 1), opacity .6s ease; }
-.cat-slide.no-anim { transition: none; }
 .cat-slide.side { cursor: pointer; }
 .cat-slide.side:hover { opacity: .6 !important; }
 .cat-controls { display: flex; align-items: center; justify-content: center; gap: 14px; }

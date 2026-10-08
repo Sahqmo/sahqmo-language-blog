@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../api.js'
 import { useAuth } from '../auth.jsx'
 import PostBrowser from '../components/PostBrowser.jsx'
-import CategoryDonut, { countCategories } from '../components/CategoryDonut.jsx'
+import CategoryDonut, { compareCategories, countCategories } from '../components/CategoryDonut.jsx'
 import DateLabel from '../components/DateLabel.jsx'
 import CategoryCarousel from '../components/CategoryCarousel.jsx'
 
@@ -42,7 +42,8 @@ export default function Home() {
 
   const latest = posts[0]
   const hasPosts = posts.length > 0
-  const topCats = cats.slice(0, 5)
+  // '많이 쓴' 카테고리: 글이 많은 순 5개 (cats 는 언어 우선 순서로 정렬돼 있어서 그대로 자르면 안 됨)
+  const topCats = [...cats].sort((a, b) => b.count - a.count || compareCategories(a.name, b.name)).slice(0, 5)
   const setCategory = (c) => setParams(c ? { category: c } : {})
 
   return (
