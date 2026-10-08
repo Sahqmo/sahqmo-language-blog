@@ -126,7 +126,9 @@ nav a:hover { color: var(--text); }
 .prose { overflow-wrap: anywhere; line-height: 1.5; }
 .prose > * { margin: 0; }
 .prose > * + * { margin-top: 4px; }
-.prose p { margin: 0; padding: 3px 0; }
+/* 문단 안에서 줄이 넘어갈 때의 간격 = 엔터로 문단을 나눌 때의 간격(≈2.09em) */
+.prose p { margin: 0; padding: 0; line-height: 2.09; }
+.prose > p + p { margin-top: 0; }
 .prose ul, .prose ol { margin: 0; }
 .prose blockquote > * + * { margin-top: 4px; }
 .prose > blockquote { margin: 11px 0 8px; }
@@ -228,7 +230,8 @@ nav a:hover { color: var(--text); }
 .rich-editor { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); min-height: 520px; padding: 8px 0; }
 /* Crepe 의 .ProseMirror 는 grid(gap 12px) 라서 min-height 를 주면 행이 늘어나 행간이 벌어짐 → 높이는 바깥 래퍼에서만 확보 */
 .rich-editor .milkdown .ProseMirror { padding: 24px 40px 48px 72px; min-height: 0; gap: 4px; align-content: start; }
-.rich-editor .milkdown .ProseMirror p { padding: 3px 0; }
+.rich-editor .milkdown .ProseMirror p { padding: 0; line-height: 2.09; }
+.rich-editor .milkdown .ProseMirror > p + p { margin-top: -4px; }
 /* 줄바꿈(Shift+Enter 또는 기존 글의 단일 개행)을 화면에서도 줄바꿈으로 */
 .rich-editor [data-type='hardbreak'][data-is-inline='true']::after { content: '\A'; white-space: pre; }
 .rich-editor .ProseMirror blockquote { border-left: 3px solid var(--accent); }

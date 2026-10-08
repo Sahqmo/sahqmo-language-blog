@@ -80,7 +80,7 @@ export default function Editor() {
           autoFocus
         />
         <label className="switch" title="비공개 글은 로그인한 나에게만 보여요">
-          <input type="checkbox" role="switch" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
+          <input type="checkbox" role="switch" checked={!isPrivate} onChange={(e) => setIsPrivate(!e.target.checked)} />
           <span className="switch-track" />
           <span className="switch-label">{isPrivate ? '비공개' : '공개'}</span>
         </label>
