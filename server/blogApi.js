@@ -256,6 +256,33 @@ function scheduleCleanup() {
   return () => clearTimeout(timer)
 }
 
+// ---------- 언어 공부 플래너 ----------
+// data/planner.json: { days: [월, 화, 수, 목, 금, 토, 일] } — 요일마다 { name: 공부할 언어, native: 그 언어로 쓴 언어 이름(부제) }
+// (예전 형식인 문자열 한 줄은 name 으로 읽음)
+const PLANNER_MAX = 100
+const PLANNER_FILE = path.join(DATA, 'planner.json')
+const cleanText = (v) => (typeof v === 'string' ? v.trim().slice(0, PLANNER_MAX) : '')
+const cleanPlanner = (days) =>
+  Array.from({ length: 7 }, (_, i) => {
+    const d = days?.[i]
+    return typeof d === 'string' ? { name: cleanText(d), native: '' } : { name: cleanText(d?.name), native: cleanText(d?.native) }
+  })
+
+async function readPlanner() {
+  try {
+    return { days: cleanPlanner(JSON.parse(await fs.readFile(PLANNER_FILE, 'utf8')).days) }
+  } catch {
+    return { days: cleanPlanner([]) }
+  }
+}
+
+async function writePlanner(days) {
+  const data = { days: cleanPlanner(days) }
+  await fs.mkdir(DATA, { recursive: true })
+  await fs.writeFile(PLANNER_FILE, JSON.stringify(data, null, 2))
+  return data
+}
+
 // ---------- 이미지 파일명 ----------
 // 업로드 이미지는 `YYYYMMDD-HHmmss-xxxx.확장자` 형식으로 저장 (원본 파일명은 보관하지 않음)
 const IMAGE_NAME = /^\d{8}-\d{6}-[0-9a-f]{4}\.[a-z0-9]+$/
@@ -324,6 +351,17 @@ async function handle(req, res, url) {
   // 조회(GET) 외의 모든 요청은 로그인 필요
   if (req.method !== 'GET' && !(await isAuthed(req))) {
     return send(res, 401, { error: '로그인이 필요해요.' })
+  }
+
+  // 언어 공부 플래너: 로그인한 사람만 읽고 쓸 수 있음 (월~일 7칸의 자유 입력)
+  if (parts[0] === 'planner') {
+    if (!(await isAuthed(req))) return send(res, 401, { error: '로그인이 필요해요.' })
+    if (req.method === 'GET') return send(res, 200, await readPlanner())
+    if (req.method === 'PUT') {
+      const { days } = await readJson(req)
+      if (!Array.isArray(days)) return send(res, 400, { error: '요일별 계획이 필요해요.' })
+      return send(res, 200, await writePlanner(days))
+    }
   }
 
   if (parts[0] === 'posts') {

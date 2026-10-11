@@ -6,16 +6,23 @@ import PostBrowser from '../components/PostBrowser.jsx'
 import CategoryDonut, { compareCategories, countCategories } from '../components/CategoryDonut.jsx'
 import DateLabel from '../components/DateLabel.jsx'
 import CategoryCarousel from '../components/CategoryCarousel.jsx'
+import SideSlider from '../components/SideSlider.jsx'
+import PlannerView from '../components/PlannerView.jsx'
 
 // 새로고침(첫 진입) 때만 첫 화면 섹션들을 순서대로 등장시킴. 이후 SPA 내 이동에서는 생략
 let heroPlayed = false
+// 다른 페이지에서 로고를 눌러 메인으로 올 때는 새로고침한 것처럼 등장 연출(슬롯 포함)을 다시 보여 줌
+export const replayHero = () => {
+  heroPlayed = false
+}
 
 export default function Home() {
-  const { loggedIn } = useAuth()
+  const { ready, loggedIn } = useAuth()
   const [params, setParams] = useSearchParams()
   const category = params.get('category') || ''
   const [posts, setPosts] = useState(null)
   const [error, setError] = useState('')
+  const [planner, setPlanner] = useState(null) // 로그인했을 때만 불러옴
   const listRef = useRef(null)
   const [intro] = useState(() => !heroPlayed)
   useEffect(() => {
@@ -30,6 +37,15 @@ export default function Home() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!loggedIn) return setPlanner(null)
+    let stale = false
+    api.planner().then((p) => !stale && setPlanner(p.days)).catch(() => !stale && setPlanner([]))
+    return () => {
+      stale = true
+    }
+  }, [loggedIn])
+
   // 카테고리를 고르면(차트 범례·카드·칩) 아래쪽 목록으로 부드럽게 이동
   useEffect(() => {
     if (category && posts) listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -38,7 +54,8 @@ export default function Home() {
   const cats = useMemo(() => (posts ? countCategories(posts) : []), [posts])
 
   if (error) return <p className="state error">{error}</p>
-  if (!posts) return <p className="state">불러오는 중…</p>
+  // 로그인 여부가 확정되기 전에 그리면 오른쪽 칸(슬라이드 유무)이 나중에 바뀌어 레이아웃이 움직이므로 같이 기다림
+  if (!posts || !ready) return <p className="state">불러오는 중…</p>
 
   const latest = posts[0]
   const hasPosts = posts.length > 0
@@ -71,8 +88,20 @@ export default function Home() {
           </div>
         )}
         <div className={`panel ${intro ? 'enter' : ''}`} style={intro ? { '--i': 1 } : undefined}>
-          <h3 className="panel-title">언어별 글 비율</h3>
-          <CategoryDonut data={cats} total={posts.length} />
+          {/* 로그인하면 '언어 공부 플래너'가 먼저, 10초 뒤 '언어별 글 비율'로 넘어감 */}
+          {loggedIn ? (
+            <SideSlider
+              slides={[
+                { key: 'planner', title: '언어 공부 플래너', node: planner ? <PlannerView days={planner} spin={intro} /> : <div className="planner-view" /> },
+                { key: 'ratio', title: '언어별 글 비율', node: <CategoryDonut data={cats} total={posts.length} /> },
+              ]}
+            />
+          ) : (
+            <>
+              <h3 className="panel-title">언어별 글 비율</h3>
+              <CategoryDonut data={cats} total={posts.length} />
+            </>
+          )}
         </div>
       </section>
 

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api.js'
-import DateLabel from '../components/DateLabel.jsx'
+import { PostDates } from '../components/DateLabel.jsx'
 import { useAuth } from '../auth.jsx'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
 import PostMarkdown from '../PostMarkdown.jsx'
@@ -95,8 +95,6 @@ export default function PostPage() {
               {post.category}
             </Link>
           )}
-          <DateLabel iso={post.date} withTime />
-          {post.updated && <span>· <DateLabel iso={post.updated} withTime /> 수정</span>}
           {loggedIn && (
             <div className="icon-actions">
               <Link to={`/edit/${post.id}`} className="icon-btn" title="수정" aria-label="수정">
@@ -108,6 +106,7 @@ export default function PostPage() {
             </div>
           )}
         </div>
+        <PostDates date={post.date} updated={post.updated} />
         {post.tags.length > 0 && (
           <div className="tags">
             {post.tags.map((t) => (

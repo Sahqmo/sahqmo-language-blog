@@ -37,6 +37,8 @@ export const api = {
   create: (post) => request('/api/posts', json('POST', post)).then(changed),
   update: (ref, post) => request(`/api/posts/${encodeURIComponent(ref)}`, json('PUT', post)).then(changed),
   remove: (ref) => request(`/api/posts/${encodeURIComponent(ref)}`, { method: 'DELETE' }).then(changed),
+  planner: () => request('/api/planner'),
+  savePlanner: (days) => request('/api/planner', json('PUT', { days })),
   upload: (file) =>
     request(`/api/upload?name=${encodeURIComponent(file.name || 'image.png')}`, {
       method: 'POST',

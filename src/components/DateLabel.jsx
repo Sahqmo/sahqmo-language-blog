@@ -45,3 +45,24 @@ export default function DateLabel({ iso, withTime = false }) {
     </time>
   )
 }
+
+// 글 페이지용: 정확한 날짜·시각을 먼저 크게, 상대 시간은 옆에 흐리게. 수정 시각은 아래 줄에 따로
+export function PostDates({ date, updated }) {
+  const now = useNow()
+  if (!date) return null
+  return (
+    <div className="post-dates">
+      <div>
+        <time dateTime={date}>{formatDateTime(date)}</time>
+        <span className="rel">{formatRelative(date, now)}</span>
+      </div>
+      {updated && (
+        <div className="edited">
+          <span className="tag">수정</span>
+          <time dateTime={updated}>{formatDateTime(updated)}</time>
+          <span className="rel">{formatRelative(updated, now)}</span>
+        </div>
+      )}
+    </div>
+  )
+}

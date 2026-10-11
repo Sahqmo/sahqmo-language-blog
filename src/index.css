@@ -590,3 +590,90 @@ body { overflow-x: clip; }
   .table-bar button { padding: 7px 14px; }
   .chip { padding: 5px 16px; }
 }
+
+/* ---------- 언어 공부 플래너 ---------- */
+/* 메인 오른쪽 칸 슬라이드: 모든 장이 같은 칸에 겹쳐 높이는 가장 큰 장에 맞춰지고, 보이는 장만 서서히 나타남 */
+.side-stack { display: grid; }
+.side-slide { grid-area: 1 / 1; opacity: 0; visibility: hidden; transition: opacity .5s ease, visibility 0s .5s; }
+.side-slide.on { opacity: 1; visibility: visible; transition: opacity .5s ease; }
+.side-dots { justify-content: center; margin-top: 18px; }
+@media (prefers-reduced-motion: reduce) { .side-slide, .side-slide.on { transition: none; } }
+
+.planner-view { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.planner-lead { margin: 0; color: var(--muted); font-size: .95rem; }
+.planner-today { font-family: var(--serif); font-size: 2.2rem; line-height: 1.25; color: var(--accent); overflow-wrap: anywhere; padding: 8px 0 12px; }
+.planner-today.rest { color: var(--muted); font-size: 1.6rem; }
+.planner-edit { font-size: .85rem; color: var(--muted); }
+.planner-edit:hover { color: var(--accent); }
+
+.planner-page { max-width: 520px; margin: 24px auto; display: grid; gap: 16px; }
+.planner-page h1 { margin: 0; font-size: 1.6rem; }
+.planner-hint { margin: 0; color: var(--muted); font-size: .9rem; }
+.planner-form { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.planner-form li { display: flex; align-items: center; gap: 12px; padding: 6px 10px; border-radius: 10px; }
+.planner-form li.today { background: var(--accent-soft); }
+.planner-form label { flex: none; width: 1.4em; font-weight: 600; color: var(--muted); }
+.planner-form input {
+  flex: 1; min-width: 0; padding: 8px 14px; font: inherit; color: var(--text);
+  border: 1px solid var(--line); border-radius: 999px; background: var(--surface); outline: none;
+}
+.planner-form input:focus { border-color: var(--accent); }
+.planner-actions { display: flex; align-items: center; gap: 14px; }
+.planner-ok { color: var(--accent); font-size: .9rem; }
+
+/* 플래너 장은 donut 장보다 낮아서 위로 쏠리므로, 제목 아래 남는 공간의 한가운데에 내용을 놓음 */
+.side-slide { display: flex; flex-direction: column; }
+.planner-view { flex: 1; justify-content: center; }
+
+/* 오늘의 언어 슬롯: 창 한 칸(1.4em)만 보이고 릴이 위로 굴러감. 멈춘 뒤 글자와 높이가 같도록 line-height 를 맞춤 */
+.planner-today { line-height: 1.4; }
+.slot-window { display: block; }
+.slot-window.spin { height: 1.4em; overflow: hidden; }
+.slot-reel { display: flex; flex-direction: column; }
+.slot-reel > span { flex: none; height: 1.4em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slot-window { -webkit-mask-image: linear-gradient(transparent, #000 14%, #000 86%, transparent); mask-image: linear-gradient(transparent, #000 14%, #000 86%, transparent); }
+
+/* 플래너: 요일마다 언어 + 부제(그 언어로 쓴 이름) 두 칸 */
+.planner-fields { flex: 1; min-width: 0; display: grid; gap: 6px; }
+.planner-form input.sub { padding: 6px 14px; font-size: .88rem; color: var(--muted); }
+.planner-form li { align-items: flex-start; }
+.planner-form label { padding-top: 9px; }
+.planner-native { margin: -8px 0 0; font-size: 1rem; font-style: italic; letter-spacing: .06em; color: var(--muted); transition: opacity .6s ease; }
+.planner-native.hide { opacity: 0; }
+
+/* 플래너 수정: 드래그로 순서 바꾸기 */
+.planner-grip { flex: none; align-self: center; width: 18px; text-align: center; color: var(--muted); cursor: grab; user-select: none; touch-action: none; opacity: .6; transition: opacity .15s; }
+.planner-form li:hover .planner-grip { opacity: 1; }
+.planner-form li { position: relative; }
+.planner-form li.dragging { opacity: .4; }
+.planner-form li.over-before::before, .planner-form li.over-after::after { content: ''; position: absolute; left: 0; right: 0; height: 2px; border-radius: 2px; background: var(--accent); }
+.planner-form li.over-before::before { top: -5px; }
+.planner-form li.over-after::after { bottom: -5px; }
+
+/* 글 페이지 날짜: 정확한 시각이 먼저, 상대 시간은 흐리게, 수정은 아래 줄 */
+.post-dates { margin: -2px 0 20px; display: grid; gap: 2px; font-size: .9rem; color: var(--text); }
+.post-dates .rel { margin-left: 10px; color: var(--muted); font-size: .82rem; }
+.post-dates .edited { color: var(--muted); font-size: .82rem; }
+.post-dates .edited .tag { margin-right: 8px; padding: 0 7px; border: 1px solid var(--line); border-radius: 999px; font-size: .72rem; }
+.post-dates .edited .rel { font-size: .78rem; }
+
+/* 메인 플래너 섹션 글자 키움 */
+.planner-view { gap: 18px; }
+.planner-lead { font-size: 1.2rem; }
+.planner-today { font-size: 3.2rem; padding: 10px 0 14px; }
+.planner-today.rest { font-size: 2.4rem; }
+.planner-native { font-size: 1.3rem; margin-top: -10px; }
+.planner-edit { font-size: 1rem; }
+@media (max-width: 560px) {
+  .planner-lead { font-size: 1.1rem; }
+  .planner-today { font-size: 2.6rem; }
+  .planner-today.rest { font-size: 2rem; }
+  .planner-native { font-size: 1.15rem; }
+}
+
+/* 언어 이름과 부제는 한 덩어리로 가깝게, 다른 요소와는 간격을 둠 */
+.planner-view { gap: 0; }
+.planner-lead { margin-bottom: 26px; }
+.planner-today { padding: 6px 0 0; }
+.planner-native { margin: -6px 0 0; padding-top: 0; }
+.planner-edit { margin-top: 20px; }
